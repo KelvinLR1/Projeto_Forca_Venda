@@ -1,0 +1,6 @@
+node_modules/
+forca-vendas.sqlite
+forca-vendas.sqlite-shm
+forca-vendas.sqlite-wal
+.env
+.erp-config-key
