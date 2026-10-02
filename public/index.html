@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#f6f7f5"><title>Vértice | Força de Vendas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=order-search-field-fix-v1">
+  <link rel="stylesheet" href="/styles.css?v=settings-access-submenu-v1">
 </head>
 <body>
   <div class="auth-screen" id="auth-screen">
@@ -32,8 +32,8 @@
         <button class="nav-item" data-page="produtos"><span class="nav-icon">▦</span> Produtos</button>
         <button class="nav-item" data-page="relatorios" id="reports-nav"><span class="nav-icon">▥</span> Relatórios <span class="nav-chevron" id="reports-chevron">⌄</span></button>
         <div class="nav-submenu" id="reports-submenu" hidden><button class="submenu-item active" data-report-view="overview">Visão geral</button><button class="submenu-item" data-report-view="sales">Vendas</button><button class="submenu-item" data-report-view="orders">Pedidos</button><button class="submenu-item" data-report-view="customers">Clientes</button><button class="submenu-item" data-report-view="products">Produtos</button></div>
-        <button class="nav-item" data-page="acessos" id="users-nav" hidden><span class="nav-icon">⚙</span> Acessos</button>
-        <button class="nav-item" data-page="configuracoes" id="settings-nav" hidden><span class="nav-icon">⚙</span> Configurações</button>
+        <button class="nav-item" data-page="configuracoes" id="settings-nav" hidden><span class="nav-icon">⚙</span> Configurações <span class="nav-chevron" id="settings-chevron">⌄</span></button>
+        <div class="nav-submenu" id="settings-submenu" hidden><button class="submenu-item" data-page="acessos">Acessos</button></div>
       </nav>
       <div class="sidebar-bottom"><div class="sync-card"><div class="sync-title"><span class="sync-dot" id="sync-dot"></span> Conexão ERP</div><p id="sync-label">Ambiente de demonstração</p><button id="sync-action">Ver status <span>↗</span></button></div><div class="profile"><div class="avatar" id="profile-initials">MC</div><span><b id="profile-name">Mariana Costa</b><small id="profile-role">Representante</small></span><button class="more logout-btn" id="logout-btn" aria-label="Sair da conta" title="Sair">↪</button></div></div>
     </aside>
@@ -176,7 +176,7 @@
   <dialog id="erp-preview-dialog" class="modal"><div class="erp-preview-content"><div class="modal-head"><div><div class="eyebrow">COMPATIBILIDADE COM ERP</div><h2>Plano de envio do pedido</h2></div><button class="close-btn" type="button" id="close-erp-preview" aria-label="Fechar">×</button></div><div id="erp-preview-body"></div><div class="modal-actions"><button class="btn btn-secondary" type="button" id="close-erp-preview-bottom">Fechar</button></div></div></dialog>
   <dialog id="visit-dialog" class="modal"><form method="dialog" id="visit-form"><div class="modal-head"><div><div class="eyebrow">REGISTRO DE ATENDIMENTO</div><h2>Registrar visita</h2><p class="muted" id="visit-customer-name"></p></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><div class="visit-no-sale-note">A visita será registrada mesmo sem pedido ou venda.</div><label>Resultado<select id="visit-result"><option>Sem venda</option><option>Oportunidade identificada</option><option>Retorno combinado</option></select></label><label>Observações da visita<textarea id="visit-notes" rows="4" maxlength="2000" placeholder="Resumo da conversa, interesses e próximos passos"></textarea></label><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-visit" value="default">Salvar visita</button></div></form></dialog>
   <dialog id="user-dialog" class="modal"><form method="dialog" id="user-form"><div class="modal-head"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h2>Criar acesso</h2></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><label>Nome<input id="user-name" required minlength="2" autocomplete="off"></label><label>E-mail<input id="user-email" type="email" required autocomplete="off"></label><div class="form-row"><label>Perfil<select id="user-role"><option value="seller">Vendedor</option><option value="manager">Gestor</option><option value="admin">Administrador</option></select></label><label>Senha inicial<input id="user-password" type="password" minlength="10" required autocomplete="new-password"></label></div><div class="auth-foot">Use uma senha inicial segura com pelo menos 10 caracteres.</div><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-user" value="default">Criar acesso</button></div></form></dialog>
-  <script src="/app.js?v=order-search-field-fix-v1" type="module"></script>
+  <script src="/app.js?v=settings-access-submenu-v1" type="module"></script>
 </body>
 </html>
 
