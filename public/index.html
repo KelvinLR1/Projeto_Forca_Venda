@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#f6f7f5"><title>Vértice | Força de Vendas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=settings-access-tab-v1">
+  <link rel="stylesheet" href="/styles.css?v=settings-erp-layout-v1">
 </head>
 <body>
   <div class="auth-screen" id="auth-screen">
@@ -123,17 +123,17 @@
             <div class="settings-tab-panel active" id="settings-panel-erp" role="tabpanel" aria-labelledby="settings-tab-erp" data-settings-panel="erp">
             <section class="panel settings-card">
               <div class="settings-card-head"><span class="settings-icon">↔</span><div><h2>Integração com o ERP</h2><p class="muted">Moderniza API Loja · ambiente de teste ou produção</p></div></div>
-              <div class="settings-fields">
+              <div class="settings-fields settings-erp-fields">
                 <label>Ambiente<select id="settings-erp-environment"><option value="homologacao">Homologação / testes</option><option value="producao">Produção</option></select></label>
-                <label>Endereço base da API<input id="settings-erp-url" type="url" placeholder="http://servidor:35150/ModernizaApi"><small>Use o endereço informado na instalação da API no servidor do ERP.</small></label>
-                <label>Endpoint para obter token<input id="settings-erp-token-path" type="text" value="/token" placeholder="/token"><small>Na Moderniza API, o token é obtido em /token usando grant_type=password.</small></label>
-                <div class="settings-auth-info settings-wide"><strong>Dados enviados no corpo da requisição</strong><span>Formato <code>application/x-www-form-urlencoded</code> · <code>grant_type=password</code> (fixo)</span></div>
-                <label>username<input id="settings-erp-username" type="text" autocomplete="off" placeholder="Deixe em branco para manter o usuário salvo"><small>Parâmetro enviado ao endpoint de token.</small></label>
-                <label>password<input id="settings-erp-password" type="password" autocomplete="new-password" placeholder="Deixe em branco para manter a senha salva"><small>Parâmetro enviado ao endpoint; armazenado criptografado no servidor.</small></label>
-                <label class="settings-wide">Cabeçalhos HTTP adicionais (JSON)<textarea id="settings-erp-token-headers" rows="3" placeholder='{"X-Api-Key":"sua-chave"}'></textarea><small>Opcional; preencha somente se o servidor exigir cabeçalhos além do Content-Type.</small></label>
-                <label class="settings-wide settings-check"><input id="settings-erp-clear-credentials" type="checkbox"> Remover credenciais e cabeçalhos salvos ao salvar</label>
-                <label>ID da filial no ERP<input id="settings-erp-branch" inputmode="numeric" placeholder="Ex.: 1"><small>Identificador interno da filial que será usada nos pedidos.</small></label>
                 <label>Intervalo de sincronização previsto<select id="settings-sync-interval"><option value="5">A cada 5 minutos</option><option value="15">A cada 15 minutos</option><option value="30">A cada 30 minutos</option><option value="60">A cada hora</option><option value="360">A cada 6 horas</option><option value="720">A cada 12 horas</option><option value="1440">Uma vez ao dia</option></select></label>
+                <label>Endereço base da API<input id="settings-erp-url" type="url" placeholder="http://servidor:35150/ModernizaApi"><small>Endereço da Moderniza API instalada no servidor do ERP.</small></label>
+                <label>Endpoint para obter token<input id="settings-erp-token-path" type="text" value="/token" placeholder="/token"><small>Rota de autenticação; padrão da Moderniza API: /token.</small></label>
+                <label>username<input id="settings-erp-username" type="text" autocomplete="off" placeholder="Deixe em branco para manter o usuário salvo"><small>Usuário enviado na autenticação.</small></label>
+                <label>password<input id="settings-erp-password" type="password" autocomplete="new-password" placeholder="Deixe em branco para manter a senha salva"><small>Armazenada criptografada no servidor.</small></label>
+                <label>ID da filial no ERP<input id="settings-erp-branch" inputmode="numeric" placeholder="Ex.: 1"><small>Filial usada nos pedidos enviados ao ERP.</small></label>
+                <div class="settings-auth-info"><strong>Autenticação</strong><span><code>grant_type=password</code> · <code>application/x-www-form-urlencoded</code></span></div>
+                <label class="settings-wide">Cabeçalhos HTTP adicionais (JSON)<textarea id="settings-erp-token-headers" rows="3" placeholder='{"X-Api-Key":"sua-chave"}'></textarea><small>Opcional. Use somente se o servidor exigir cabeçalhos extras.</small></label>
+                <label class="settings-wide settings-check"><input id="settings-erp-clear-credentials" type="checkbox"> Remover credenciais e cabeçalhos salvos ao salvar</label>
               </div>
               <div class="settings-notice"><strong id="settings-erp-status">Conector ainda não ativado</strong><span>O login Moderniza usa grant_type=password no endpoint de token. O conector usará o token Bearer nas chamadas seguintes. Credenciais e cabeçalhos são criptografados no servidor; salvar esta tela ainda não faz chamadas ao ERP.</span></div>
             </section>
@@ -176,7 +176,7 @@
   <dialog id="erp-preview-dialog" class="modal"><div class="erp-preview-content"><div class="modal-head"><div><div class="eyebrow">COMPATIBILIDADE COM ERP</div><h2>Plano de envio do pedido</h2></div><button class="close-btn" type="button" id="close-erp-preview" aria-label="Fechar">×</button></div><div id="erp-preview-body"></div><div class="modal-actions"><button class="btn btn-secondary" type="button" id="close-erp-preview-bottom">Fechar</button></div></div></dialog>
   <dialog id="visit-dialog" class="modal"><form method="dialog" id="visit-form"><div class="modal-head"><div><div class="eyebrow">REGISTRO DE ATENDIMENTO</div><h2>Registrar visita</h2><p class="muted" id="visit-customer-name"></p></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><div class="visit-no-sale-note">A visita será registrada mesmo sem pedido ou venda.</div><label>Resultado<select id="visit-result"><option>Sem venda</option><option>Oportunidade identificada</option><option>Retorno combinado</option></select></label><label>Observações da visita<textarea id="visit-notes" rows="4" maxlength="2000" placeholder="Resumo da conversa, interesses e próximos passos"></textarea></label><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-visit" value="default">Salvar visita</button></div></form></dialog>
   <dialog id="user-dialog" class="modal"><form method="dialog" id="user-form"><div class="modal-head"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h2>Criar acesso</h2></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><label>Nome<input id="user-name" required minlength="2" autocomplete="off"></label><label>E-mail<input id="user-email" type="email" required autocomplete="off"></label><div class="form-row"><label>Perfil<select id="user-role"><option value="seller">Vendedor</option><option value="manager">Gestor</option><option value="admin">Administrador</option></select></label><label>Senha inicial<input id="user-password" type="password" minlength="10" required autocomplete="new-password"></label></div><div class="auth-foot">Use uma senha inicial segura com pelo menos 10 caracteres.</div><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-user" value="default">Criar acesso</button></div></form></dialog>
-  <script src="/app.js?v=settings-access-tab-v1" type="module"></script>
+  <script src="/app.js?v=settings-erp-layout-v1" type="module"></script>
 </body>
 </html>
 
