@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#f6f7f5"><title>Vértice | Força de Vendas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=settings-access-submenu-v1">
+  <link rel="stylesheet" href="/styles.css?v=settings-access-tab-v1">
 </head>
 <body>
   <div class="auth-screen" id="auth-screen">
@@ -32,8 +32,7 @@
         <button class="nav-item" data-page="produtos"><span class="nav-icon">▦</span> Produtos</button>
         <button class="nav-item" data-page="relatorios" id="reports-nav"><span class="nav-icon">▥</span> Relatórios <span class="nav-chevron" id="reports-chevron">⌄</span></button>
         <div class="nav-submenu" id="reports-submenu" hidden><button class="submenu-item active" data-report-view="overview">Visão geral</button><button class="submenu-item" data-report-view="sales">Vendas</button><button class="submenu-item" data-report-view="orders">Pedidos</button><button class="submenu-item" data-report-view="customers">Clientes</button><button class="submenu-item" data-report-view="products">Produtos</button></div>
-        <button class="nav-item" data-page="configuracoes" id="settings-nav" hidden><span class="nav-icon">⚙</span> Configurações <span class="nav-chevron" id="settings-chevron">⌄</span></button>
-        <div class="nav-submenu" id="settings-submenu" hidden><button class="submenu-item" data-page="acessos">Acessos</button></div>
+        <button class="nav-item" data-page="configuracoes" id="settings-nav" hidden><span class="nav-icon">⚙</span> Configurações</button>
       </nav>
       <div class="sidebar-bottom"><div class="sync-card"><div class="sync-title"><span class="sync-dot" id="sync-dot"></span> Conexão ERP</div><p id="sync-label">Ambiente de demonstração</p><button id="sync-action">Ver status <span>↗</span></button></div><div class="profile"><div class="avatar" id="profile-initials">MC</div><span><b id="profile-name">Mariana Costa</b><small id="profile-role">Representante</small></span><button class="more logout-btn" id="logout-btn" aria-label="Sair da conta" title="Sair">↪</button></div></div>
     </aside>
@@ -112,7 +111,6 @@
         <section class="page" id="page-rota-detalhe"><div class="detail-back-row"><button class="btn btn-secondary" type="button" data-action="back-to-routes">← Voltar para rotas</button></div><div id="visit-route-detail"></div></section>
         <section class="page" id="page-produtos"><div class="section-heading"><div><div class="eyebrow">CATÁLOGO COMERCIAL</div><h1>Produtos</h1><p class="muted">Consulte produtos, preços e disponibilidade por lista.</p></div></div><div class="toolbar"><div class="searchbox"><span>⌕</span><input id="product-search" placeholder="Buscar produto ou código..."></div><select class="select-small" id="product-price-list" aria-label="Lista de preços do catálogo"></select><select class="select-small" id="product-category-filter" aria-label="Filtrar produtos por categoria"><option value="">Todas as categorias</option></select><select class="select-small" id="product-stock-filter" aria-label="Filtrar produtos por disponibilidade"><option value="">Qualquer disponibilidade</option><option value="available">Em estoque</option><option value="low">Estoque baixo</option><option value="out">Indisponíveis</option></select><span class="result-count" id="product-count"></span><div class="view-switch" role="group" aria-label="Visualização dos produtos"><button type="button" data-view-kind="products" data-view="cards" aria-pressed="true">▦ Cards</button><button type="button" data-view-kind="products" data-view="list" aria-pressed="false">☰ Lista</button></div></div><div class="product-grid" id="product-grid"></div></section>
         <section class="page" id="page-produto-detalhe"><div class="detail-back-row"><button class="btn btn-secondary" type="button" id="back-to-products">← Voltar para produtos</button></div><div id="product-detail-content"></div></section>
-        <section class="page" id="page-acessos"><div class="section-heading"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h1>Controle de acessos</h1><p class="muted">Crie contas e defina quem pode entrar no sistema.</p></div><button class="btn btn-primary" data-action="new-user">＋ Novo acesso</button></div><section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>USUÁRIO</th><th>E-MAIL</th><th>PERFIL</th><th>STATUS</th><th></th></tr></thead><tbody id="users-table"></tbody></table></div></section></section>
         <section class="page" id="page-configuracoes">
           <div class="section-heading"><div><div class="eyebrow">ADMINISTRAÇÃO DO SISTEMA</div><h1>Configurações</h1><p class="muted">Ajustes gerais, integração com o ERP e regras da operação.</p></div></div>
           <form id="project-settings-form" class="settings-layout">
@@ -120,6 +118,7 @@
               <button class="settings-tab active" type="button" role="tab" id="settings-tab-erp" aria-selected="true" aria-controls="settings-panel-erp" data-settings-tab="erp"><span>↔</span> Conexão ERP</button>
               <button class="settings-tab" type="button" role="tab" id="settings-tab-operations" aria-selected="false" aria-controls="settings-panel-operations" data-settings-tab="operations"><span>▤</span> Operação</button>
               <button class="settings-tab" type="button" role="tab" id="settings-tab-system" aria-selected="false" aria-controls="settings-panel-system" data-settings-tab="system"><span>⚙</span> Sistema</button>
+              <button class="settings-tab" type="button" role="tab" id="settings-tab-access" aria-selected="false" aria-controls="settings-panel-access" data-settings-tab="access"><span>♙</span> Acessos</button>
             </nav>
             <div class="settings-tab-panel active" id="settings-panel-erp" role="tabpanel" aria-labelledby="settings-tab-erp" data-settings-panel="erp">
             <section class="panel settings-card">
@@ -149,12 +148,13 @@
               </div>
             </section>
             </div>
+            <div class="settings-tab-panel" id="settings-panel-access" role="tabpanel" aria-labelledby="settings-tab-access" data-settings-panel="access" hidden>
+              <section class="panel table-panel">
+                <div class="panel-head"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h2>Controle de acessos</h2><p class="muted">Crie contas e defina quem pode entrar no sistema.</p></div><button class="btn btn-primary" type="button" data-action="new-user">＋ Novo acesso</button></div>
+                <div class="table-wrap"><table><thead><tr><th>USUÁRIO</th><th>E-MAIL</th><th>PERFIL</th><th>STATUS</th><th></th></tr></thead><tbody id="users-table"></tbody></table></div>
+              </section>
+            </div>
             <div class="settings-tab-panel settings-system-panel" id="settings-panel-system" role="tabpanel" aria-labelledby="settings-tab-system" data-settings-panel="system" hidden>
-            <section class="panel settings-card settings-access-card">
-              <div class="settings-card-head"><span class="settings-icon">♙</span><div><h2>Acessos e segurança</h2><p class="muted">Gerencie usuários e perfis autorizados.</p></div></div>
-              <p>O sistema exige login e oferece perfis de administrador, gestor e vendedor.</p>
-              <button class="btn btn-secondary" type="button" data-page="acessos">Gerenciar acessos</button>
-            </section>
             <section class="panel settings-card">
               <div class="settings-card-head"><span class="settings-icon">⌖</span><div><h2>Mapa dos trajetos</h2><p class="muted">Google Maps incorporado na tela da rota.</p></div></div>
               <div class="settings-fields"><label class="settings-wide settings-check"><input id="settings-map-enabled" type="checkbox"> Ativar mapa na tela de trajeto</label><label>Chave da Maps Embed API<input id="settings-map-api-key" type="password" autocomplete="off" placeholder="Deixe em branco para manter a chave salva"><small>Ative a Maps Embed API no Google Cloud e restrinja a chave ao domínio do sistema. A chave é usada no navegador para carregar o mapa.</small></label><label class="settings-wide settings-check"><input id="settings-map-clear-key" type="checkbox"> Remover a chave salva</label><div class="settings-notice"><strong id="settings-map-status">Mapa ainda não configurado</strong><span>Desativado, o mapa e o atalho externo ficam ocultos; a lista ordenada de clientes continua disponível na aba Trajeto.</span></div></div>
@@ -176,7 +176,7 @@
   <dialog id="erp-preview-dialog" class="modal"><div class="erp-preview-content"><div class="modal-head"><div><div class="eyebrow">COMPATIBILIDADE COM ERP</div><h2>Plano de envio do pedido</h2></div><button class="close-btn" type="button" id="close-erp-preview" aria-label="Fechar">×</button></div><div id="erp-preview-body"></div><div class="modal-actions"><button class="btn btn-secondary" type="button" id="close-erp-preview-bottom">Fechar</button></div></div></dialog>
   <dialog id="visit-dialog" class="modal"><form method="dialog" id="visit-form"><div class="modal-head"><div><div class="eyebrow">REGISTRO DE ATENDIMENTO</div><h2>Registrar visita</h2><p class="muted" id="visit-customer-name"></p></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><div class="visit-no-sale-note">A visita será registrada mesmo sem pedido ou venda.</div><label>Resultado<select id="visit-result"><option>Sem venda</option><option>Oportunidade identificada</option><option>Retorno combinado</option></select></label><label>Observações da visita<textarea id="visit-notes" rows="4" maxlength="2000" placeholder="Resumo da conversa, interesses e próximos passos"></textarea></label><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-visit" value="default">Salvar visita</button></div></form></dialog>
   <dialog id="user-dialog" class="modal"><form method="dialog" id="user-form"><div class="modal-head"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h2>Criar acesso</h2></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><label>Nome<input id="user-name" required minlength="2" autocomplete="off"></label><label>E-mail<input id="user-email" type="email" required autocomplete="off"></label><div class="form-row"><label>Perfil<select id="user-role"><option value="seller">Vendedor</option><option value="manager">Gestor</option><option value="admin">Administrador</option></select></label><label>Senha inicial<input id="user-password" type="password" minlength="10" required autocomplete="new-password"></label></div><div class="auth-foot">Use uma senha inicial segura com pelo menos 10 caracteres.</div><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-user" value="default">Criar acesso</button></div></form></dialog>
-  <script src="/app.js?v=settings-access-submenu-v1" type="module"></script>
+  <script src="/app.js?v=settings-access-tab-v1" type="module"></script>
 </body>
 </html>
 
