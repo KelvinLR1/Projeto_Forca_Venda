@@ -42,7 +42,7 @@ As metas numéricas serão definidas na descoberta, usando indicadores atuais co
 8. **Administração e operação:** gestão de usuários, parâmetros de sincronização, registros de erro e opção de reprocessamento controlado.
 9. **Dados próprios da força de vendas:** cadastro, consulta e uso de informações adicionais não fornecidas pelo ERP, conforme regras definidas na descoberta, como anotações comerciais, preferências de atendimento e campos personalizados.
 10. **Relatórios e análises:** faturamento, pedidos, ticket médio, evolução por período, distribuição por status e rankings de clientes e produtos, com exportação CSV.
-11. **Listas de preços:** consulta por lista no catálogo, seleção de uma lista para o pedido completo ou escolha por produto, com preço e lista registrados em cada item para revisão posterior.
+11. **Listas de preços:** seleção de uma lista padrão no início do pedido; cada produto herda essa lista e pode receber outra individualmente. O preço final e a lista de origem ficam salvos no item, e a integração envia um único pedido com o preço de cada item.
 
 ### Fora do escopo inicial
 
@@ -69,7 +69,7 @@ CRM completo, roteirização, cobrança, emissão fiscal, gestão de comissões,
 - Registrar eventos técnicos com identificadores de correlação, sem expor credenciais ou dados pessoais desnecessários.
 - Estabelecer política para indisponibilidade do ERP: consulta a dados recentes quando apropriado, aviso ao usuário e fila de envio sujeita a validação posterior.
 - Relacionar os registros do banco próprio aos identificadores do ERP, definindo para cada campo sua origem, responsável pela atualização e regra de sincronização.
-- Como o ERP aceita somente uma lista de preços por pedido, agrupar os itens de um pedido local pela lista selecionada. Cada grupo deverá gerar um pedido independente no ERP, com chave de idempotência, status e identificador externo próprios; a interface mostrará ao vendedor quando houver mais de um envio.
+- O ERP aceita uma lista de preços por pedido, mas a plataforma permite escolher uma lista padrão e substituí-la em itens específicos. A integração manterá um pedido único e enviará a cada item o preço final calculado da lista selecionada, sem criar pedidos separados por lista.
 - Antes do envio real, confirmar o mapeamento das listas e revalidar preço e condições conforme a API do ERP. Se apenas parte dos grupos for aceita, preservar os resultados recebidos e permitir retentativa somente dos grupos pendentes ou rejeitados.
 
 ## 6. Arquitetura proposta

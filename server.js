@@ -230,9 +230,10 @@ async function getProjectSettings(){
   try{saved=row?JSON.parse(row.value):{}}catch{}
   const secrets=await decryptErpSecrets(db.prepare('SELECT value FROM app_meta WHERE key=?').get('erp_connection_secrets')?.value);
   const activeList=Number(saved.operations?.defaultPriceListId)||defaultPriceListId||0;
+  const {defaultPriceMode:_legacyPriceMode,...savedOperations}=saved.operations||{};
   return {
     erp:{environment:'homologacao',apiBaseUrl:process.env.ERP_API_URL||'',branchId:'',syncIntervalMinutes:30,tokenPath:'/token',...(saved.erp||{}),credentialsConfigured:Boolean(secrets.username&&secrets.password),tokenHeadersConfigured:Boolean(secrets.tokenHeaders&&Object.keys(secrets.tokenHeaders).length),usernameConfigured:Boolean(secrets.username)},
-    operations:{defaultPriceMode:'order',defaultPriceListId:activeList,defaultVisitIntervalDays:30,...(saved.operations||{})},
+    operations:{defaultPriceListId:activeList,defaultVisitIntervalDays:30,...savedOperations},
     maps:{enabled:saved.maps?.enabled===true,googleEmbedApiKey:String(saved.maps?.googleEmbedApiKey||'')},
     updatedAt:saved.updatedAt||null
   };
@@ -302,14 +303,13 @@ const server = createServer(async (req,res) => {
     }
     if(url.pathname==='/api/settings'&&req.method==='PUT'){
       if(user.role!=='admin') return send(res,403,{error:'Somente administradores podem alterar as configurações.'});
-      const b=await body(req),environment=String(b.erp?.environment||''),rawUrl=String(b.erp?.apiBaseUrl||'').trim(),branchId=String(b.erp?.branchId||'').trim(),syncIntervalMinutes=Number(b.erp?.syncIntervalMinutes),tokenPath=String(b.erp?.tokenPath||'/token').trim(),defaultPriceMode=String(b.operations?.defaultPriceMode||''),defaultPriceListId=Number(b.operations?.defaultPriceListId),defaultVisitIntervalDays=Number(b.operations?.defaultVisitIntervalDays);
+      const b=await body(req),environment=String(b.erp?.environment||''),rawUrl=String(b.erp?.apiBaseUrl||'').trim(),branchId=String(b.erp?.branchId||'').trim(),syncIntervalMinutes=Number(b.erp?.syncIntervalMinutes),tokenPath=String(b.erp?.tokenPath||'/token').trim(),defaultPriceListId=Number(b.operations?.defaultPriceListId),defaultVisitIntervalDays=Number(b.operations?.defaultVisitIntervalDays);
       if(!['homologacao','producao'].includes(environment)) return send(res,400,{error:'Selecione homologação ou produção.'});
       if(rawUrl.length>2048) return send(res,400,{error:'O endereço da API é muito longo.'});
       if(rawUrl){try{const parsed=new URL(rawUrl);if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password||parsed.search||parsed.hash)return send(res,400,{error:'Informe um endereço HTTP ou HTTPS válido, sem usuário, senha, parâmetros ou fragmento.'})}catch{return send(res,400,{error:'Informe um endereço válido para a API do ERP.'})}}
       if(branchId&&(!/^\d+$/.test(branchId)||Number(branchId)<1)) return send(res,400,{error:'O ID da filial deve ser um número inteiro positivo.'});
       if(!tokenPath.startsWith('/')||tokenPath.startsWith('//')||tokenPath.length>512||/[?#]/.test(tokenPath)) return send(res,400,{error:'Informe o caminho do endpoint de token começando com /.'});
       if(![5,15,30,60,360,720,1440].includes(syncIntervalMinutes)) return send(res,400,{error:'Selecione um intervalo de sincronização disponível.'});
-      if(!['order','item'].includes(defaultPriceMode)) return send(res,400,{error:'Selecione como a lista de preços será aplicada.'});
       if(!db.prepare('SELECT id FROM price_lists WHERE id=? AND active=1').get(defaultPriceListId)) return send(res,400,{error:'Selecione uma lista de preços ativa.'});
       if(!Number.isInteger(defaultVisitIntervalDays)||defaultVisitIntervalDays<1||defaultVisitIntervalDays>365) return send(res,400,{error:'O prazo padrão de visita deve ficar entre 1 e 365 dias.'});
       const oldSecrets=await decryptErpSecrets(db.prepare('SELECT value FROM app_meta WHERE key=?').get('erp_connection_secrets')?.value);
@@ -320,7 +320,7 @@ const server = createServer(async (req,res) => {
       if(b.erp?.clearCredentials){nextSecrets.username='';nextSecrets.password='';nextSecrets.tokenHeaders={}}
       const googleEmbedApiKey=String(b.maps?.googleEmbedApiKey||'').trim()||String((await getProjectSettings()).maps.googleEmbedApiKey||'');
       if(googleEmbedApiKey.length>256||googleEmbedApiKey&&!/^[A-Za-z0-9_-]+$/.test(googleEmbedApiKey))return send(res,400,{error:'Confira a chave da API do Google Maps.'});
-      const updated={erp:{environment,apiBaseUrl:rawUrl.replace(/\/+$/,''),branchId,syncIntervalMinutes,tokenPath},operations:{defaultPriceMode,defaultPriceListId,defaultVisitIntervalDays},maps:{enabled:b.maps?.enabled===true,googleEmbedApiKey:b.maps?.clearApiKey?'':googleEmbedApiKey},updatedAt:new Date().toISOString()};
+      const updated={erp:{environment,apiBaseUrl:rawUrl.replace(/\/+$/,''),branchId,syncIntervalMinutes,tokenPath},operations:{defaultPriceListId,defaultVisitIntervalDays},maps:{enabled:b.maps?.enabled===true,googleEmbedApiKey:b.maps?.clearApiKey?'':googleEmbedApiKey},updatedAt:new Date().toISOString()};
       db.prepare('INSERT INTO app_meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run('project_settings',JSON.stringify(updated));
       db.prepare('INSERT INTO app_meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run('erp_connection_secrets',await encryptErpSecrets(nextSecrets));
       return send(res,200,await getProjectSettings());
@@ -550,7 +550,7 @@ const server = createServer(async (req,res) => {
       const items=JSON.parse(order.items_json||'[]');
       const groups=buildErpDispatchPlan(order,customer,items,lists);
       const dispatches=db.prepare('SELECT price_list_id,dispatch_key,status,erp_order_id FROM erp_order_dispatches WHERE order_id=? ORDER BY id').all(order.id);
-      return send(res,200,{localOrderId:order.id,priceMode:order.price_mode,groupCount:groups.length,requiresSplit:groups.length>1,groups,dispatches,adapterConfigured:false,message:'O contrato da API do ERP ainda não foi configurado; este é o plano de envio.'});
+      return send(res,200,{localOrderId:order.id,priceMode:order.price_mode,groupCount:groups.length,requiresSplit:groups.length>1,groups,dispatches,adapterConfigured:false,message:'Plano de envio: um único pedido, com o preço selecionado em cada item.'});
     }
     if (url.pathname === '/api/orders' && req.method === 'POST') {
       const b = await body(req);
@@ -561,13 +561,13 @@ const server = createServer(async (req,res) => {
       const client = db.prepare('SELECT * FROM customers WHERE id=?').get(Number(b.customerId));
       if (!client) return send(res,400,{error:'Selecione um cliente válido.'});
       if (!Array.isArray(b.items)||!b.items.length) return send(res,400,{error:'Adicione pelo menos um produto ao pedido.'});
-      const priceMode=b.priceMode==='item'?'item':'order';
+      const priceMode='item';
       const headerListId=Number(b.priceListId||defaultPriceListId);
-      if(priceMode==='order'&&!db.prepare('SELECT id FROM price_lists WHERE id=? AND active=1').get(headerListId)) return send(res,400,{error:'Selecione uma lista de preços válida para o pedido.'});
+      if(!db.prepare('SELECT id FROM price_lists WHERE id=? AND active=1').get(headerListId)) return send(res,400,{error:'Selecione uma lista de preços válida para o pedido.'});
       const items=b.items.map(item=>{
         const product=db.prepare('SELECT id,name,sku,cost_price FROM products WHERE id=?').get(Number(item.productId));
         if(!product) throw new Error('Um dos produtos não foi encontrado.');
-        const qty=Number(item.qty),listId=priceMode==='order'?headerListId:Number(item.priceListId);
+        const qty=Number(item.qty),listId=Number(item.priceListId||headerListId);
         if(!Number.isInteger(qty)||qty<1) throw new Error('Informe uma quantidade inteira maior que zero.');
         const rate=db.prepare(`SELECT pp.price,pl.erp_id price_list_erp_id,pl.name price_list_name
           FROM product_prices pp JOIN price_lists pl ON pl.id=pp.price_list_id
@@ -599,10 +599,10 @@ const server = createServer(async (req,res) => {
       db.exec('BEGIN IMMEDIATE');
       let order;
       try {
-        const result=db.prepare('INSERT INTO orders (customer_id,customer_name,seller,status,total,items_json,note,idempotency_key,price_mode,price_list_id,payment_method,payment_condition,installment_count,down_payment) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(client.id,client.name,user.name,'Rascunho',total,JSON.stringify(items),b.note||'',b.idempotencyKey?String(b.idempotencyKey).slice(0,100):null,priceMode,priceMode==='order'?headerListId:null,paymentMethod,paymentCondition,termPaymentMethods.includes(paymentMethod)?installmentCount:1,termPaymentMethods.includes(paymentMethod)?downPayment:0);
+        const result=db.prepare('INSERT INTO orders (customer_id,customer_name,seller,status,total,items_json,note,idempotency_key,price_mode,price_list_id,payment_method,payment_condition,installment_count,down_payment) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(client.id,client.name,user.name,'Rascunho',total,JSON.stringify(items),b.note||'',b.idempotencyKey?String(b.idempotencyKey).slice(0,100):null,priceMode,headerListId,paymentMethod,paymentCondition,termPaymentMethods.includes(paymentMethod)?installmentCount:1,termPaymentMethods.includes(paymentMethod)?downPayment:0);
         order=db.prepare('SELECT * FROM orders WHERE id=?').get(result.lastInsertRowid);
         const addDispatch=db.prepare('INSERT INTO erp_order_dispatches (order_id,price_list_id,dispatch_key) VALUES (?,?,?)');
-        for(const listId of new Set(items.map(item=>item.priceListId))) addDispatch.run(order.id,listId,`order-${order.id}-list-${listId}`);
+        addDispatch.run(order.id,headerListId,`order-${order.id}`);
         db.exec('COMMIT');
       } catch (error) { db.exec('ROLLBACK'); throw error; }
       broadcast('data-changed',{resource:'orders',action:'created'});

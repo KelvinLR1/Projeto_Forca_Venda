@@ -24,8 +24,8 @@ Abra `http://localhost:3000`. O servidor não exige instalação de dependência
 - Pesquisa e filtros de clientes (segmento e status), produtos (categoria e disponibilidade) e pedidos (status e período); ficha do cliente com análises de compras, pendências, registro e histórico de visitas sem venda, última visita e alerta de retorno conforme prazo configurável por cliente (padrão: 30 dias).
 - Cadastro de clientes com notas comerciais adicionais, persistidas no banco próprio.
 - Criação de pedidos como rascunho, persistidos no banco próprio.
-- Catálogo com consulta por lista de preços e pedidos com lista aplicada ao pedido inteiro ou a cada produto.
-- Plano de envio ao ERP por lista: quando um rascunho usa listas diferentes, o sistema prepara um envio separado para cada lista, com chave e acompanhamento próprios. O botão **Prévia ERP** no pedido mostra esse plano.
+- Catálogo com consulta por lista de preços e pedidos com uma lista padrão que pode ser substituída por item.
+- Preço do pedido: o vendedor escolhe uma lista padrão no início. Cada item herda essa lista e pode usar outra; a prévia ERP mantém um único pedido e informa o preço final e a lista de origem de cada item.
 - Atualização dos dados em outras sessões abertas, via eventos em tempo real.
 - Chave de idempotência nos pedidos para reduzir duplicidade em reenvios.
 - API local em `/api/customers`, `/api/products`, `/api/price-lists`, `/api/orders`, `/api/dashboard` e `/api/reports`.
@@ -50,7 +50,7 @@ O servidor identifica a configuração por `ERP_API_URL`, mas o adaptador de int
 
 No banco próprio, `price_lists` guarda a lista e seu identificador no ERP; `product_prices` guarda o preço de cada produto nessa lista. O servidor recalcula o preço ao salvar um pedido, sem confiar no valor enviado pelo navegador. Cada item mantém uma cópia do preço e da lista usados no rascunho. O MVP inclui listas **Padrão** e **Atacado** apenas para demonstração. Seus identificadores e valores deverão ser substituídos pelos dados oficiais do ERP.
 
-O ERP informado aceita uma lista por pedido. Assim, a seleção por produto fica no pedido local, mas o plano de integração agrupa itens pela lista e gera uma solicitação distinta para cada grupo. A tabela `erp_order_dispatches` reserva uma chave estável por grupo para futura idempotência e rastreamento dos identificadores devolvidos pelo ERP. O endpoint `GET /api/orders/:id/erp-preview` mostra o plano; ele ainda não envia dados externos, pois o formato de autenticação e o contrato do ERP não foram fornecidos.
+O vendedor escolhe uma lista de preços padrão ao iniciar cada pedido; cada item pode herdar essa lista ou usar outra. O servidor calcula e salva o preço final de cada item e a respectiva lista de origem. O pedido permanece único no ERP: a futura integração enviará o valor unitário final em cada item, sem dividir o pedido por lista. A tabela `erp_order_dispatches` reserva uma chave estável por pedido para futura idempotência e rastreamento dos identificadores devolvidos pelo ERP. O endpoint `GET /api/orders/:id/erp-preview` mostra esse plano; ele ainda não envia dados externos, pois o contrato do ERP não foi configurado.
 
 O MVP mantém separado o dado adicional da plataforma (por exemplo, notas comerciais) dos dados mestres do ERP. Os registros poderão ser associados por `erp_id` depois de validar as chaves reais disponibilizadas pelo ERP.
 

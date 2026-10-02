@@ -16,20 +16,22 @@ test('uma lista gera um único envio com total e chave estável', () => {
   ], lists);
   assert.equal(groups.length, 1);
   assert.equal(groups[0].priceListErpId, 'ERP-PADRAO');
-  assert.equal(groups[0].dispatchKey, 'order-42-list-1');
+  assert.equal(groups[0].dispatchKey, 'order-42');
   assert.equal(groups[0].total, 25);
   assert.equal(groups[0].items.length, 2);
 });
 
-test('listas por produto geram envios separados e preservam o preço salvo', () => {
+test('listas diferentes por item preservam os preços e geram um único pedido ERP', () => {
   const groups = buildErpDispatchPlan(order, customer, [
     { productId: 3, sku: 'A', qty: 2, price: 10, subtotal: 20, priceListId: 1 },
     { productId: 4, sku: 'B', qty: 3, price: 4.5, subtotal: 13.5, priceListId: 2, priceListErpId: 'ERP-ATACADO-ORIGINAL' },
   ], lists);
-  assert.equal(groups.length, 2);
-  assert.deepEqual(groups.map(group => group.total), [20, 13.5]);
-  assert.deepEqual(groups.map(group => group.priceListId), [1, 2]);
-  assert.equal(groups[1].priceListErpId, 'ERP-ATACADO-ORIGINAL');
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].dispatchKey, 'order-42');
+  assert.equal(groups[0].total, 33.5);
+  assert.deepEqual(groups[0].items.map(item => item.priceListId), [1, 2]);
+  assert.deepEqual(groups[0].items.map(item => item.unitPrice), [10, 4.5]);
+  assert.equal(groups[0].items[1].priceListErpId, 'ERP-ATACADO-ORIGINAL');
 });
 
 test('pedidos anteriores usam a lista do cabeçalho', () => {
