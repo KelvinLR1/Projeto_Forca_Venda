@@ -252,3 +252,27 @@ body[data-theme="dark"] .order-product-commerce-meta .order-product-stock{color:
 @media(max-width:900px){.order-product-price-choice{gap:10px}.order-product-commerce-meta{min-width:82px}.order-product-commerce-meta .order-product-price{font-size:12px}.order-product-commerce-meta .order-product-stock{font-size:8px}}
 @media(max-width:740px){.order-product-option>.order-product-price-choice{grid-template-columns:minmax(0,1fr) minmax(80px,auto);gap:10px}.order-product-commerce-meta{min-width:80px}}
 @media(max-width:390px){.order-product-option>.order-product-price-choice{grid-template-columns:minmax(0,1fr) minmax(72px,auto);gap:7px}.order-product-commerce-meta{min-width:72px}.order-product-commerce-meta .order-product-price{font-size:11px}.order-product-commerce-meta .order-product-stock{font-size:7px}}
+
+/* Product picker sub-tabs keep browsing and cart review focused. */
+.order-product-subtabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:14px 0 12px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--white);}
+.order-product-subtab{display:flex;align-items:center;justify-content:center;gap:9px;min-width:0;min-height:40px;padding:8px 12px;border:0;border-radius:7px;background:transparent;color:var(--muted);font:600 10px var(--font);cursor:pointer;transition:background .15s ease,color .15s ease;}
+.order-product-subtab:hover{background:var(--canvas);color:var(--ink)}
+.order-product-subtab.active{background:#eaf5ee;color:#23764e;box-shadow:0 1px 3px #1b39200d}
+.order-product-subtab:focus-visible{outline:2px solid #27845f88;outline-offset:1px}
+.order-product-subtab-count{display:grid;place-items:center;min-width:22px;height:20px;padding:0 6px;border-radius:10px;background:var(--canvas);color:inherit;font-size:8px;font-weight:800}
+.order-product-subtab.active .order-product-subtab-count{background:#d5ecde;color:#176b47}
+.order-product-view[hidden]{display:none!important}
+.order-product-view{min-width:0}
+.order-product-view .order-product-options{margin-top:2px}
+.order-product-view .order-step-cart{margin-top:0;padding-top:2px;border-top:0}
+.order-product-view .order-step-cart-heading{margin-bottom:12px}
+.order-product-view .order-step-cart-heading>div{display:grid;gap:4px}
+.order-product-view .order-step-cart-heading small{color:var(--muted);font-size:9px;font-weight:400}
+.order-product-view .order-step-cart-items{max-height:min(55vh,560px)}
+body[data-theme="dark"] .order-product-subtabs{border-color:#343e51;background:#171e2c}
+body[data-theme="dark"] .order-product-subtab{color:#aeb8c6}
+body[data-theme="dark"] .order-product-subtab:hover{background:#202a39;color:#eef1f6}
+body[data-theme="dark"] .order-product-subtab.active{background:#203a2d;color:#84d0a1}
+body[data-theme="dark"] .order-product-subtab-count{background:#202a39}
+body[data-theme="dark"] .order-product-subtab.active .order-product-subtab-count{background:#28533d;color:#a2e2b8}
+@media(max-width:520px){.order-product-subtabs{margin:10px 0;padding:3px}.order-product-subtab{min-height:38px;padding:7px 6px;font-size:9px;gap:6px}.order-product-view .order-step-cart-items{max-height:none}}
