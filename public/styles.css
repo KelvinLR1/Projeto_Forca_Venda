@@ -335,3 +335,43 @@ body[data-theme="dark"] .portfolio-filter.active{border-color:#42694f;background
 body[data-theme="dark"] .portfolio-filter span{background:#202a39}
 body[data-theme="dark"] .portfolio-draft-status{border-color:#5d4b2d;background:#302a1e;color:#e2c47e}
 @media(max-width:680px){.portfolio-panel{padding:14px}.portfolio-tools{align-items:stretch;flex-direction:column;gap:8px}.portfolio-search{flex-basis:auto;max-width:none}.portfolio-table-wrap{max-height:60vh}.portfolio-pagination{align-items:flex-start;flex-direction:column}.portfolio-pagination>div{width:100%}.portfolio-pagination .btn{flex:1}}
+
+/* Team administration integrated with customer portfolio management. */
+.team-management-panel{padding:20px;margin-bottom:18px}
+.team-management-panel>.panel-head,.team-management-panel .panel-head{margin-bottom:14px}
+.team-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:9px;margin-bottom:16px}
+.team-list-card{display:flex;align-items:center;gap:10px;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);text-align:left;cursor:pointer;transition:border-color .15s ease,background .15s ease}
+.team-list-card:hover,.team-list-card.active{border-color:#8dbca0;background:var(--canvas)}
+.team-list-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:8px;background:#e9f4ed;color:#23805a;font-size:16px}
+.team-list-copy{display:grid;gap:3px;min-width:0;flex:1}
+.team-list-copy strong{font-size:10px}
+.team-list-copy small{overflow:hidden;color:var(--muted);font-size:8px;text-overflow:ellipsis;white-space:nowrap}
+.team-list-arrow{color:var(--muted);font-size:8px;white-space:nowrap}
+.team-editor{padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--canvas)}
+.team-editor-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.team-editor-heading h3{margin:4px 0 0;font-size:14px}
+.team-editor-heading>.muted{font-size:9px}
+.team-form-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.team-member-field{min-width:0;margin:14px 0 0;padding:11px;border:1px solid var(--line);border-radius:8px}
+.team-member-field legend{padding:0 5px;font-size:10px;font-weight:700}
+.team-seller-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px}
+.team-seller-option{display:flex;align-items:center;gap:9px;min-width:0;padding:9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);cursor:pointer}
+.team-seller-option:has(input:checked){border-color:#a6d0b5;background:#f0f8f3}
+.team-seller-option input{width:15px;height:15px;flex:0 0 15px;margin:0;accent-color:#21845e}
+.team-seller-option>span{display:grid;gap:3px;min-width:0}
+.team-seller-option strong{font-size:9px}
+.team-seller-option small{color:var(--muted);font-size:8px}
+.team-seller-option.inactive{opacity:.68}
+.team-editor-actions{display:flex;justify-content:flex-end;margin-top:13px}
+.manager-team-summary{padding:16px;border:1px solid var(--line);border-radius:9px;background:var(--canvas)}
+.manager-team-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.manager-team-heading h2{margin:4px 0;font-size:16px}
+.manager-team-heading .muted{margin:0;font-size:9px}
+.team-member-count{padding:6px 9px;border-radius:20px;background:#e8f4ec;color:#23805a;font-size:9px;font-weight:700;white-space:nowrap}
+.manager-team-members{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.manager-team-members span{padding:6px 9px;border:1px solid var(--line);border-radius:20px;background:var(--surface);font-size:9px}
+.portfolio-heading{margin-bottom:13px}
+body[data-theme="dark"] .team-list-icon,body[data-theme="dark"] .team-member-count{background:#203a2d;color:#84d0a1}
+body[data-theme="dark"] .team-list-card:hover,body[data-theme="dark"] .team-list-card.active{background:#202a39;border-color:#54836a}
+body[data-theme="dark"] .team-seller-option:has(input:checked){background:#203a2d;border-color:#42694f}
+@media(max-width:680px){.team-management-panel{padding:14px}.team-editor{padding:12px}.team-editor-heading{align-items:flex-start;flex-direction:column}.team-form-fields{grid-template-columns:1fr}.team-seller-options{grid-template-columns:1fr}}

@@ -120,6 +120,18 @@ db.exec(`CREATE TABLE IF NOT EXISTS customer_portfolio_assignments (
 CREATE INDEX IF NOT EXISTS customer_portfolio_user_idx ON customer_portfolio_assignments(user_id,customer_id);
 INSERT OR IGNORE INTO customer_portfolio_assignments(customer_id,user_id)
   SELECT id,assigned_user_id FROM customers WHERE assigned_user_id IS NOT NULL;`);
+db.exec(`CREATE TABLE IF NOT EXISTS sales_teams (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, manager_user_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(manager_user_id) REFERENCES users(id) ON DELETE RESTRICT
+);
+CREATE TABLE IF NOT EXISTS sales_team_members (
+  team_id INTEGER NOT NULL, user_id INTEGER NOT NULL UNIQUE,
+  PRIMARY KEY(team_id,user_id),
+  FOREIGN KEY(team_id) REFERENCES sales_teams(id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS sales_team_members_user_idx ON sales_team_members(user_id,team_id);`);
 const productColumns=db.prepare('PRAGMA table_info(products)').all().map(column=>column.name);
 if(!productColumns.includes('image_url')) db.exec("ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''");
 if(!productColumns.includes('cost_price')) db.exec('ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT NULL');
@@ -518,22 +530,62 @@ const server = createServer(async (req,res) => {
       else{for(let day=new Date(start);day<=end;day.setDate(day.getDate()+1)){const key=iso(day);salesSeries.push({date:key,label:new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short'}).format(day).replace('.',''),revenue:salesMap.get(key)||0})}}
       return send(res,200,{period,startDate:iso(start),endDate:iso(end),summary:{orders:ordersCount,revenue,averageTicket:ordersCount?revenue/ordersCount:0,customers:customerSet.size,previousOrders:previous.orders,previousRevenue:previous.revenue,revenueChangePct:previous.revenue?(revenue-previous.revenue)/previous.revenue*100:null,ordersChangePct:previous.orders?(ordersCount-previous.orders)/previous.orders*100:null},orders:currentRows.map(({id,erp_id,customer_name,status,total,created_at})=>({id,erp_id,customer_name,status,total,created_at})),salesSeries,statuses:[...statuses.values()].sort((a,b)=>b.revenue-a.revenue),topCustomers:[...clients.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,10),topProducts:[...productsMap.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,10)});
     }
+    if(url.pathname==='/api/teams'&&(req.method==='GET'||req.method==='PUT')){
+      if(req.method==='GET'){
+        if(!['admin','manager'].includes(user.role))return send(res,403,{error:'Somente gestores e administradores podem consultar equipes.'});
+        const where=user.role==='manager'?'WHERE t.manager_user_id=?':'';
+        const teams=db.prepare(`SELECT t.id,t.name,t.manager_user_id,m.name manager_name,(SELECT GROUP_CONCAT(stm.user_id) FROM sales_team_members stm WHERE stm.team_id=t.id) seller_ids,(SELECT GROUP_CONCAT(u.name, ' · ') FROM sales_team_members stm JOIN users u ON u.id=stm.user_id WHERE stm.team_id=t.id) seller_names FROM sales_teams t JOIN users m ON m.id=t.manager_user_id ${where} ORDER BY t.name`).all(...(user.role==='manager'?[user.id]:[])).map(row=>({...row,seller_ids:row.seller_ids?row.seller_ids.split(',').map(Number):[]}));
+        if(user.role==='manager')return send(res,200,{teams,managers:[],sellers:[]});
+        const managers=db.prepare("SELECT id,name,active FROM users WHERE role='manager' ORDER BY active DESC,name").all().map(row=>({...row,active:Boolean(row.active)}));
+        const sellers=db.prepare("SELECT u.id,u.name,u.active,(SELECT t.name FROM sales_team_members stm JOIN sales_teams t ON t.id=stm.team_id WHERE stm.user_id=u.id) team_name,(SELECT team_id FROM sales_team_members WHERE user_id=u.id) team_id FROM users u WHERE u.role='seller' ORDER BY u.active DESC,u.name").all().map(row=>({...row,active:Boolean(row.active)}));
+        return send(res,200,{teams,managers,sellers});
+      }
+      if(user.role!=='admin')return send(res,403,{error:'Somente administradores podem configurar equipes.'});
+      const b=await body(req),teamId=b.teamId?Number(b.teamId):null,name=String(b.name||'').trim(),managerId=Number(b.managerId),sellerIds=Array.isArray(b.sellerIds)?b.sellerIds.map(Number):[];
+      if(name.length<2||name.length>100||!Number.isInteger(managerId)||managerId<1||!sellerIds.length||sellerIds.some(id=>!Number.isInteger(id)||id<1)||new Set(sellerIds).size!==sellerIds.length)return send(res,400,{error:'Informe o nome da equipe, um gestor e ao menos um vendedor.'});
+      if(teamId!==null&&(!Number.isInteger(teamId)||teamId<1||!db.prepare('SELECT id FROM sales_teams WHERE id=?').get(teamId)))return send(res,404,{error:'Equipe não encontrada.'});
+      if(!db.prepare("SELECT id FROM users WHERE id=? AND role='manager' AND active=1").get(managerId))return send(res,400,{error:'Selecione um gestor ativo.'});
+      if(db.prepare('SELECT id FROM sales_teams WHERE manager_user_id=? AND id!=COALESCE(?,0)').get(managerId,teamId))return send(res,400,{error:'Este gestor já está vinculado a outra equipe.'});
+      for(const sellerId of sellerIds){
+        if(!db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND (active=1 OR id IN (SELECT user_id FROM sales_team_members WHERE team_id=COALESCE(?,0)))").get(sellerId,teamId))return send(res,400,{error:'Selecione vendedores válidos para a equipe.'});
+        if(db.prepare('SELECT team_id FROM sales_team_members WHERE user_id=? AND team_id!=COALESCE(?,0)').get(sellerId,teamId))return send(res,400,{error:'Um vendedor selecionado já pertence a outra equipe.'});
+      }
+      db.exec('BEGIN IMMEDIATE');let savedId=teamId;
+      try{
+        if(savedId===null)savedId=Number(db.prepare('INSERT INTO sales_teams(name,manager_user_id) VALUES(?,?)').run(name,managerId).lastInsertRowid);
+        else db.prepare("UPDATE sales_teams SET name=?,manager_user_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(name,managerId,savedId);
+        db.prepare('DELETE FROM sales_team_members WHERE team_id=?').run(savedId);
+        const addMember=db.prepare('INSERT INTO sales_team_members(team_id,user_id) VALUES(?,?)');for(const sellerId of sellerIds)addMember.run(savedId,sellerId);
+        db.exec('COMMIT');
+      }catch(error){db.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))return send(res,400,{error:'O nome, gestor ou vendedor já está vinculado a outra equipe.'});throw error}
+      broadcast('data-changed',{resource:'teams',action:teamId===null?'created':'updated',teamId:savedId});
+      return send(res,200,{teamId:savedId});
+    }
     if(url.pathname==='/api/customer-portfolio'&&(req.method==='GET'||req.method==='PUT')){
       if(!['admin','manager'].includes(user.role))return send(res,403,{error:'Somente gestores e administradores podem gerenciar as carteiras.'});
+      const managedTeam=user.role==='manager'?db.prepare('SELECT id FROM sales_teams WHERE manager_user_id=?').get(user.id):null;
+      if(user.role==='manager'&&!managedTeam)return send(res,403,{error:'Sua conta ainda não está vinculada a uma equipe.'});
+      const teamId=managedTeam?.id||null,teamSellerIds=user.role==='manager'?db.prepare('SELECT user_id FROM sales_team_members WHERE team_id=?').all(teamId).map(row=>Number(row.user_id)):null;
+      const customerScope=user.role==='manager'?' AND (NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments ax WHERE ax.customer_id=c.id) OR EXISTS(SELECT 1 FROM customer_portfolio_assignments ax JOIN sales_team_members tm ON tm.user_id=ax.user_id WHERE ax.customer_id=c.id AND tm.team_id=?))':'';
       if(req.method==='GET'){
         const search=String(url.searchParams.get('search')||'').trim().slice(0,120),sellerFilter=String(url.searchParams.get('seller')||'all'),page=Math.min(1000000,Math.max(0,Number.parseInt(url.searchParams.get('page')||'0',10)||0)),pageSize=100,offset=page*pageSize;
         let filterSql='';const filterParams=[];
         if(sellerFilter==='unassigned')filterSql=' AND NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id)';
         else if(sellerFilter!=='all'){
           const sellerId=Number(sellerFilter);
-          if(!Number.isInteger(sellerId)||sellerId<1)return send(res,400,{error:'Selecione uma carteira válida.'});
+          if(!Number.isInteger(sellerId)||sellerId<1||(teamSellerIds&&!teamSellerIds.includes(sellerId)))return send(res,400,{error:'Selecione um vendedor da equipe.'});
           filterSql=' AND EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?)';filterParams.push(sellerId);
         }
-        const pattern=`%${search}%`,total=Number(db.prepare(`SELECT COUNT(*) count FROM customers c WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${filterSql}`).get(pattern,pattern,pattern,...filterParams).count);
-        const customers=db.prepare(`SELECT c.id,c.name,c.document,c.city,c.state,(SELECT GROUP_CONCAT(user_id) FROM customer_portfolio_assignments a WHERE a.customer_id=c.id) assigned_user_ids FROM customers c WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${filterSql} ORDER BY c.name LIMIT ? OFFSET ?`).all(pattern,pattern,pattern,...filterParams,pageSize,offset).map(row=>({...row,assigned_user_ids:row.assigned_user_ids?row.assigned_user_ids.split(',').map(Number):[]}));
-        const sellers=db.prepare("SELECT u.id,u.name,u.active,(SELECT COUNT(*) FROM customer_portfolio_assignments a WHERE a.user_id=u.id) customer_count FROM users u WHERE u.role='seller' ORDER BY u.active DESC,u.name").all().map(row=>({...row,active:Boolean(row.active)}));
-        const unassignedCount=Number(db.prepare('SELECT COUNT(*) count FROM customers c WHERE NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id)').get().count),allCount=Number(db.prepare('SELECT COUNT(*) count FROM customers').get().count);
-        return send(res,200,{customers,sellers,total,page,pageSize,unassignedCount,allCount});
+        const pattern=`%${search}%`,scopeParams=teamId===null?[]:[teamId],baseParams=[pattern,pattern,pattern,...scopeParams,...filterParams];
+        const total=Number(db.prepare(`SELECT COUNT(*) count FROM customers c WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${customerScope}${filterSql}`).get(...baseParams).count);
+        const assignmentScope=teamId===null?'':' AND a.user_id IN (SELECT user_id FROM sales_team_members WHERE team_id=?)',assignmentParams=teamId===null?[]:[teamId];
+        const customers=db.prepare(`SELECT c.id,c.name,c.document,c.city,c.state,(SELECT GROUP_CONCAT(a.user_id) FROM customer_portfolio_assignments a WHERE a.customer_id=c.id${assignmentScope}) assigned_user_ids FROM customers c WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${customerScope}${filterSql} ORDER BY c.name LIMIT ? OFFSET ?`).all(...assignmentParams,...baseParams,pageSize,offset).map(row=>({...row,assigned_user_ids:row.assigned_user_ids?row.assigned_user_ids.split(',').map(Number):[]}));
+        const sellerSql=user.role==='manager'?"SELECT u.id,u.name,u.active,(SELECT COUNT(*) FROM customer_portfolio_assignments a WHERE a.user_id=u.id) customer_count FROM users u JOIN sales_team_members tm ON tm.user_id=u.id WHERE u.role='seller' AND tm.team_id=? ORDER BY u.active DESC,u.name":"SELECT u.id,u.name,u.active,(SELECT COUNT(*) FROM customer_portfolio_assignments a WHERE a.user_id=u.id) customer_count FROM users u WHERE u.role='seller' ORDER BY u.active DESC,u.name";
+        const sellers=db.prepare(sellerSql).all(...(teamId===null?[]:[teamId])).map(row=>({...row,active:Boolean(row.active)}));
+        const unassignedCount=Number(db.prepare(`SELECT COUNT(*) count FROM customers c WHERE NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id)${teamId===null?'': ' AND '+customerScope.trim().replace(/^AND /,'')}`).get(...scopeParams).count);
+        const allCount=teamId===null?Number(db.prepare('SELECT COUNT(*) count FROM customers').get().count):Number(db.prepare(`SELECT COUNT(*) count FROM customers c WHERE (NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments ax WHERE ax.customer_id=c.id) OR EXISTS(SELECT 1 FROM customer_portfolio_assignments ax JOIN sales_team_members tm ON tm.user_id=ax.user_id WHERE ax.customer_id=c.id AND tm.team_id=?))`).get(teamId).count);
+        const team=teamId===null?null:db.prepare('SELECT id,name FROM sales_teams WHERE id=?').get(teamId);
+        return send(res,200,{customers,sellers,total,page,pageSize,unassignedCount,allCount,team});
       }
       const b=await body(req),assignments=Array.isArray(b.assignments)?b.assignments:[];
       if(!assignments.length||assignments.length>5000)return send(res,400,{error:'Envie de 1 a 5.000 alterações de carteira por vez.'});
@@ -542,12 +594,13 @@ const server = createServer(async (req,res) => {
         const customerId=Number(item?.customerId),sellerIds=item?.sellerIds;
         if(!Number.isInteger(customerId)||customerId<1||seen.has(customerId)||!Array.isArray(sellerIds)||sellerIds.some(id=>!Number.isInteger(Number(id))||Number(id)<1)||new Set(sellerIds.map(Number)).size!==sellerIds.length)return send(res,400,{error:'Há uma atribuição inválida ou duplicada.'});
         if(!db.prepare('SELECT id FROM customers WHERE id=?').get(customerId))return send(res,404,{error:'Um dos clientes não foi encontrado.'});
+        if(teamSellerIds){const canManage=db.prepare('SELECT 1 FROM customers c WHERE c.id=? AND (NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments ax WHERE ax.customer_id=c.id) OR EXISTS(SELECT 1 FROM customer_portfolio_assignments ax JOIN sales_team_members tm ON tm.user_id=ax.user_id WHERE ax.customer_id=c.id AND tm.team_id=?))').get(customerId,teamId);if(!canManage)return send(res,403,{error:'Este cliente pertence a outra equipe.'})}
         const ids=[...new Set(sellerIds.map(Number))];
-        for(const sellerId of ids)if(!db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND active=1").get(sellerId))return send(res,400,{error:'Cada cliente pode ser atribuído somente a vendedores ativos.'});
+        for(const sellerId of ids){if(teamSellerIds&&!teamSellerIds.includes(sellerId))return send(res,403,{error:'Só é possível vincular vendedores da sua equipe.'});if(!db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND (active=1 OR EXISTS(SELECT 1 FROM customer_portfolio_assignments WHERE customer_id=? AND user_id=?))").get(sellerId,customerId,sellerId))return send(res,400,{error:'Novos vínculos só podem ser feitos com vendedores ativos.'})}
         seen.add(customerId);normalized.push({customerId,sellerIds:ids});
       }
-      const remove=db.prepare('DELETE FROM customer_portfolio_assignments WHERE customer_id=?'),insert=db.prepare('INSERT INTO customer_portfolio_assignments(customer_id,user_id) VALUES(?,?)'),mirror=db.prepare('UPDATE customers SET assigned_user_id=? WHERE id=?');
-      db.exec('BEGIN IMMEDIATE');try{for(const item of normalized){remove.run(item.customerId);for(const sellerId of item.sellerIds)insert.run(item.customerId,sellerId);mirror.run(item.sellerIds.length===1?item.sellerIds[0]:null,item.customerId)}db.exec('COMMIT')}catch(error){db.exec('ROLLBACK');throw error}
+      const insert=db.prepare('INSERT OR IGNORE INTO customer_portfolio_assignments(customer_id,user_id) VALUES(?,?)'),mirror=db.prepare('UPDATE customers SET assigned_user_id=(SELECT CASE WHEN COUNT(*)=1 THEN MIN(user_id) ELSE NULL END FROM customer_portfolio_assignments WHERE customer_id=?) WHERE id=?');
+      db.exec('BEGIN IMMEDIATE');try{for(const item of normalized){if(!teamSellerIds)db.prepare('DELETE FROM customer_portfolio_assignments WHERE customer_id=?').run(item.customerId);else db.prepare('DELETE FROM customer_portfolio_assignments WHERE customer_id=? AND user_id IN (SELECT user_id FROM sales_team_members WHERE team_id=?)').run(item.customerId,teamId);for(const sellerId of item.sellerIds)insert.run(item.customerId,sellerId);mirror.run(item.customerId,item.customerId)}db.exec('COMMIT')}catch(error){db.exec('ROLLBACK');throw error}
       broadcast('data-changed',{resource:'customer_portfolio',action:'updated',count:normalized.length});
       return send(res,200,{updated:normalized.length});
     }
