@@ -276,3 +276,18 @@ body[data-theme="dark"] .order-product-subtab.active{background:#203a2d;color:#8
 body[data-theme="dark"] .order-product-subtab-count{background:#202a39}
 body[data-theme="dark"] .order-product-subtab.active .order-product-subtab-count{background:#28533d;color:#a2e2b8}
 @media(max-width:520px){.order-product-subtabs{margin:10px 0;padding:3px}.order-product-subtab{min-height:38px;padding:7px 6px;font-size:9px;gap:6px}.order-product-view .order-step-cart-items{max-height:none}}
+
+/* Soft screen and tab transitions with reduced-motion support. */
+@keyframes interface-enter{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+@keyframes option-panel-enter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.page.active{animation:interface-enter .22s ease-out both}
+.order-page-main>[data-order-step-panel]:not([hidden]){animation:option-panel-enter .18s ease-out both}
+.order-product-view.active,.customer-detail-view.active,.settings-tab-panel.active{animation:option-panel-enter .18s ease-out both}
+.order-step-tab,.customer-detail-tab,.settings-tab,.nav-item{transition:background-color .16s ease,color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+.order-step-tab:hover:not(:disabled),.customer-detail-tab:hover,.settings-tab:hover{transform:translateY(-1px)}
+.order-step-tab.active,.customer-detail-tab.active,.settings-tab.active{transition:background-color .2s ease,color .2s ease,box-shadow .2s ease}
+.order-product-option,.order-customer-option{transition:transform .16s ease,border-color .16s ease,background-color .16s ease,box-shadow .16s ease}
+.order-product-option:hover,.order-customer-option:hover{transform:translateY(-1px)}
+.order-product-subtab.active{transition:background-color .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
+.order-product-subtab:active,.btn:active:not(:disabled){transform:scale(.985)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
