@@ -109,6 +109,17 @@ const customerColumns=db.prepare('PRAGMA table_info(customers)').all().map(colum
 if(!customerColumns.includes('visit_interval_days')) db.exec('ALTER TABLE customers ADD COLUMN visit_interval_days INTEGER NOT NULL DEFAULT 30');
 if(!customerColumns.includes('assigned_user_id')) db.exec('ALTER TABLE customers ADD COLUMN assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
 db.exec('CREATE INDEX IF NOT EXISTS customers_assigned_user_idx ON customers(assigned_user_id,name)');
+db.exec(`CREATE TABLE IF NOT EXISTS customer_portfolio_assignments (
+  customer_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(customer_id,user_id),
+  FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS customer_portfolio_user_idx ON customer_portfolio_assignments(user_id,customer_id);
+INSERT OR IGNORE INTO customer_portfolio_assignments(customer_id,user_id)
+  SELECT id,assigned_user_id FROM customers WHERE assigned_user_id IS NOT NULL;`);
 const productColumns=db.prepare('PRAGMA table_info(products)').all().map(column=>column.name);
 if(!productColumns.includes('image_url')) db.exec("ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''");
 if(!productColumns.includes('cost_price')) db.exec('ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT NULL');
@@ -248,16 +259,16 @@ async function body(req) {
   return raw ? JSON.parse(raw) : {};
 }
 function listCustomers(search='', assignedUserId=null) {
-  const assignmentClause=assignedUserId==null?'':' AND c.assigned_user_id=?';
+  const assignmentClause=assignedUserId==null?'':' AND EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?)';
   const params=[`%${search}%`,`%${search}%`,`%${search}%`];
   if(assignedUserId!=null)params.push(assignedUserId);
-  return db.prepare(`SELECT c.*,u.name assigned_seller_name,COUNT(o.id) order_count,COALESCE(SUM(o.total),0) total_bought,
+  return db.prepare(`SELECT c.*,(SELECT GROUP_CONCAT(u.name, ', ') FROM customer_portfolio_assignments a JOIN users u ON u.id=a.user_id WHERE a.customer_id=c.id) assigned_seller_name,COUNT(o.id) order_count,COALESCE(SUM(o.total),0) total_bought,
       (SELECT MAX(v.visited_at) FROM customer_visits v WHERE v.customer_id=c.id) last_visit
-    FROM customers c LEFT JOIN orders o ON o.customer_id=c.id LEFT JOIN users u ON u.id=c.assigned_user_id
+    FROM customers c LEFT JOIN orders o ON o.customer_id=c.id
     WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${assignmentClause}
     GROUP BY c.id ORDER BY c.name`).all(...params);
 }
-function canAccessCustomer(user,customerId){return user.role!=='seller'||Boolean(db.prepare('SELECT id FROM customers WHERE id=? AND assigned_user_id=?').get(Number(customerId),user.id))}
+function canAccessCustomer(user,customerId){return user.role!=='seller'||Boolean(db.prepare('SELECT 1 FROM customer_portfolio_assignments WHERE customer_id=? AND user_id=?').get(Number(customerId),user.id))}
 function localDateKey(date=new Date()){const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,10)}
 function addDaysToKey(key,days){const date=new Date(`${key}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function materializeVisitRouteSeries(seriesId,through){
@@ -392,7 +403,7 @@ const server = createServer(async (req,res) => {
       if(frequency==='monthly'&&(!weeks.length||weeks.some(week=>!Number.isInteger(week)||week<1||week>5)||new Set(weeks).size!==weeks.length))return send(res,400,{error:'Selecione ao menos uma semana do mês para a recorrência mensal.'});
       if(notes.length>2000)return send(res,400,{error:'As observações podem ter até 2.000 caracteres.'});
       if(!customerIds.length||customerIds.length>100||customerIds.some(id=>!Number.isInteger(id)||id<1)||new Set(customerIds).size!==customerIds.length)return send(res,400,{error:'Selecione de 1 a 100 clientes diferentes para a rota.'});
-      if(user.role==='seller'){const owned=db.prepare(`SELECT COUNT(*) count FROM customers WHERE assigned_user_id=? AND id IN (${customerIds.map(()=>'?').join(',')})`).get(user.id,...customerIds).count;if(owned!==customerIds.length)return send(res,403,{error:'A rota só pode conter clientes da sua carteira.'})}
+      if(user.role==='seller'){const owned=db.prepare(`SELECT COUNT(*) count FROM customers c WHERE c.id IN (${customerIds.map(()=>'?').join(',')}) AND EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?)`).get(...customerIds,user.id).count;if(owned!==customerIds.length)return send(res,403,{error:'A rota só pode conter clientes da sua carteira.'})}
       const assignee=db.prepare('SELECT id FROM users WHERE id=? AND active=1').get(assignedUserId);
       if(!assignee)return send(res,400,{error:'O responsável selecionado não está ativo.'});
       if(user.role==='seller'&&assignedUserId!==user.id)return send(res,403,{error:'Vendedores só podem criar rotas para si mesmos.'});
@@ -474,10 +485,10 @@ const server = createServer(async (req,res) => {
       return;
     }
     if (url.pathname === '/api/dashboard') {
-      const totals=user.role==='seller'?db.prepare(`SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at)=date('now','localtime') AND customer_id IN (SELECT id FROM customers WHERE assigned_user_id=?)`).get(user.id):db.prepare(`SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at)=date('now','localtime')`).get();
-      const customers=user.role==='seller'?db.prepare('SELECT COUNT(*) count FROM customers WHERE assigned_user_id=?').get(user.id).count:db.prepare('SELECT COUNT(*) count FROM customers').get().count;
-      const pending=user.role==='seller'?db.prepare("SELECT COUNT(*) count FROM orders WHERE status IN ('Rascunho','Em análise','Falha na integração') AND customer_id IN (SELECT id FROM customers WHERE assigned_user_id=?)").get(user.id).count:db.prepare("SELECT COUNT(*) count FROM orders WHERE status IN ('Rascunho','Em análise','Falha na integração')").get().count;
-      const recent=user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE c.assigned_user_id=? ORDER BY o.created_at DESC LIMIT 6').all(user.id):db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 6').all();
+      const totals=user.role==='seller'?db.prepare(`SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at)=date('now','localtime') AND customer_id IN (SELECT id FROM customers c WHERE EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?))`).get(user.id):db.prepare(`SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at)=date('now','localtime')`).get();
+      const customers=user.role==='seller'?db.prepare('SELECT COUNT(*) count FROM customers c WHERE EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?)').get(user.id).count:db.prepare('SELECT COUNT(*) count FROM customers').get().count;
+      const pending=user.role==='seller'?db.prepare("SELECT COUNT(*) count FROM orders WHERE status IN ('Rascunho','Em análise','Falha na integração') AND customer_id IN (SELECT id FROM customers c WHERE EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?))").get(user.id).count:db.prepare("SELECT COUNT(*) count FROM orders WHERE status IN ('Rascunho','Em análise','Falha na integração')").get().count;
+      const recent=user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?) ORDER BY o.created_at DESC LIMIT 6').all(user.id):db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 6').all();
       return send(res,200,{...totals,customers,pending,recent});
     }
     if(url.pathname==='/api/reports'&&req.method==='GET'){
@@ -487,8 +498,8 @@ const server = createServer(async (req,res) => {
       if(period==='ytd') start.setMonth(0,1); else start.setDate(start.getDate()-({ '7d':6,'30d':29,'90d':89 }[period]));
       const spanDays=Math.round((end-start)/86400000)+1,previousEnd=new Date(start);previousEnd.setDate(previousEnd.getDate()-1);const previousStart=new Date(previousEnd);previousStart.setDate(previousStart.getDate()-spanDays+1);
       const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      const currentRows=user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE date(o.created_at) BETWEEN ? AND ? AND c.assigned_user_id=? ORDER BY o.created_at DESC').all(iso(start),iso(end),user.id):db.prepare('SELECT * FROM orders WHERE date(created_at) BETWEEN ? AND ? ORDER BY created_at DESC').all(iso(start),iso(end));
-      const previous=user.role==='seller'?db.prepare('SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at) BETWEEN ? AND ? AND customer_id IN (SELECT id FROM customers WHERE assigned_user_id=?)').get(iso(previousStart),iso(previousEnd),user.id):db.prepare('SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at) BETWEEN ? AND ?').get(iso(previousStart),iso(previousEnd));
+      const currentRows=user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE date(o.created_at) BETWEEN ? AND ? AND EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?) ORDER BY o.created_at DESC').all(iso(start),iso(end),user.id):db.prepare('SELECT * FROM orders WHERE date(created_at) BETWEEN ? AND ? ORDER BY created_at DESC').all(iso(start),iso(end));
+      const previous=user.role==='seller'?db.prepare('SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at) BETWEEN ? AND ? AND customer_id IN (SELECT id FROM customers c WHERE EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?))').get(iso(previousStart),iso(previousEnd),user.id):db.prepare('SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at) BETWEEN ? AND ?').get(iso(previousStart),iso(previousEnd));
       const revenue=currentRows.reduce((sum,o)=>sum+Number(o.total||0),0),ordersCount=currentRows.length;
       const customerSet=new Set(currentRows.map(o=>o.customer_id));
       const statuses=new Map(),clients=new Map(),productsMap=new Map(),salesMap=new Map();
@@ -512,38 +523,40 @@ const server = createServer(async (req,res) => {
       if(req.method==='GET'){
         const search=String(url.searchParams.get('search')||'').trim().slice(0,120),sellerFilter=String(url.searchParams.get('seller')||'all'),page=Math.min(1000000,Math.max(0,Number.parseInt(url.searchParams.get('page')||'0',10)||0)),pageSize=100,offset=page*pageSize;
         let filterSql='';const filterParams=[];
-        if(sellerFilter==='unassigned')filterSql=' AND c.assigned_user_id IS NULL';
+        if(sellerFilter==='unassigned')filterSql=' AND NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id)';
         else if(sellerFilter!=='all'){
           const sellerId=Number(sellerFilter);
           if(!Number.isInteger(sellerId)||sellerId<1)return send(res,400,{error:'Selecione uma carteira válida.'});
-          filterSql=' AND c.assigned_user_id=?';filterParams.push(sellerId);
+          filterSql=' AND EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?)';filterParams.push(sellerId);
         }
         const pattern=`%${search}%`,total=Number(db.prepare(`SELECT COUNT(*) count FROM customers c WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${filterSql}`).get(pattern,pattern,pattern,...filterParams).count);
-        const customers=db.prepare(`SELECT c.id,c.name,c.document,c.city,c.state,c.assigned_user_id,u.name assigned_seller_name FROM customers c LEFT JOIN users u ON u.id=c.assigned_user_id WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${filterSql} ORDER BY c.name LIMIT ? OFFSET ?`).all(pattern,pattern,pattern,...filterParams,pageSize,offset);
-        const sellers=db.prepare("SELECT u.id,u.name,u.active,(SELECT COUNT(*) FROM customers c WHERE c.assigned_user_id=u.id) customer_count FROM users u WHERE u.role='seller' ORDER BY u.active DESC,u.name").all().map(row=>({...row,active:Boolean(row.active)}));
-        const unassignedCount=Number(db.prepare('SELECT COUNT(*) count FROM customers WHERE assigned_user_id IS NULL').get().count);
-        return send(res,200,{customers,sellers,total,page,pageSize,unassignedCount});
+        const customers=db.prepare(`SELECT c.id,c.name,c.document,c.city,c.state,(SELECT GROUP_CONCAT(user_id) FROM customer_portfolio_assignments a WHERE a.customer_id=c.id) assigned_user_ids FROM customers c WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${filterSql} ORDER BY c.name LIMIT ? OFFSET ?`).all(pattern,pattern,pattern,...filterParams,pageSize,offset).map(row=>({...row,assigned_user_ids:row.assigned_user_ids?row.assigned_user_ids.split(',').map(Number):[]}));
+        const sellers=db.prepare("SELECT u.id,u.name,u.active,(SELECT COUNT(*) FROM customer_portfolio_assignments a WHERE a.user_id=u.id) customer_count FROM users u WHERE u.role='seller' ORDER BY u.active DESC,u.name").all().map(row=>({...row,active:Boolean(row.active)}));
+        const unassignedCount=Number(db.prepare('SELECT COUNT(*) count FROM customers c WHERE NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id)').get().count),allCount=Number(db.prepare('SELECT COUNT(*) count FROM customers').get().count);
+        return send(res,200,{customers,sellers,total,page,pageSize,unassignedCount,allCount});
       }
       const b=await body(req),assignments=Array.isArray(b.assignments)?b.assignments:[];
       if(!assignments.length||assignments.length>5000)return send(res,400,{error:'Envie de 1 a 5.000 alterações de carteira por vez.'});
-      const seen=new Set();
+      const seen=new Set(),normalized=[];
       for(const item of assignments){
-        const customerId=Number(item?.customerId),sellerId=item?.sellerId===null||item?.sellerId===''?null:Number(item?.sellerId);
-        if(!Number.isInteger(customerId)||customerId<1||seen.has(customerId)||sellerId!==null&&(!Number.isInteger(sellerId)||sellerId<1))return send(res,400,{error:'Há uma atribuição inválida ou duplicada.'});
+        const customerId=Number(item?.customerId),sellerIds=item?.sellerIds;
+        if(!Number.isInteger(customerId)||customerId<1||seen.has(customerId)||!Array.isArray(sellerIds)||sellerIds.some(id=>!Number.isInteger(Number(id))||Number(id)<1)||new Set(sellerIds.map(Number)).size!==sellerIds.length)return send(res,400,{error:'Há uma atribuição inválida ou duplicada.'});
         if(!db.prepare('SELECT id FROM customers WHERE id=?').get(customerId))return send(res,404,{error:'Um dos clientes não foi encontrado.'});
-        if(sellerId!==null&&!db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND active=1").get(sellerId))return send(res,400,{error:'Cada cliente deve ser atribuído a um vendedor ativo.'});
-        seen.add(customerId);
+        const ids=[...new Set(sellerIds.map(Number))];
+        for(const sellerId of ids)if(!db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND active=1").get(sellerId))return send(res,400,{error:'Cada cliente pode ser atribuído somente a vendedores ativos.'});
+        seen.add(customerId);normalized.push({customerId,sellerIds:ids});
       }
-      const update=db.prepare('UPDATE customers SET assigned_user_id=? WHERE id=?');
-      db.exec('BEGIN IMMEDIATE');try{for(const item of assignments)update.run(item.sellerId===null||item.sellerId===''?null:Number(item.sellerId),Number(item.customerId));db.exec('COMMIT')}catch(error){db.exec('ROLLBACK');throw error}
-      broadcast('data-changed',{resource:'customer_portfolio',action:'updated',count:assignments.length});
-      return send(res,200,{updated:assignments.length});
+      const remove=db.prepare('DELETE FROM customer_portfolio_assignments WHERE customer_id=?'),insert=db.prepare('INSERT INTO customer_portfolio_assignments(customer_id,user_id) VALUES(?,?)'),mirror=db.prepare('UPDATE customers SET assigned_user_id=? WHERE id=?');
+      db.exec('BEGIN IMMEDIATE');try{for(const item of normalized){remove.run(item.customerId);for(const sellerId of item.sellerIds)insert.run(item.customerId,sellerId);mirror.run(item.sellerIds.length===1?item.sellerIds[0]:null,item.customerId)}db.exec('COMMIT')}catch(error){db.exec('ROLLBACK');throw error}
+      broadcast('data-changed',{resource:'customer_portfolio',action:'updated',count:normalized.length});
+      return send(res,200,{updated:normalized.length});
     }
     if (url.pathname === '/api/customers' && req.method === 'GET') return send(res,200,listCustomers(url.searchParams.get('search')||'',user.role==='seller'?user.id:null));
     if (url.pathname === '/api/customers' && req.method === 'POST') {
       const b = await body(req);
       if (!b.name?.trim()) return send(res,400,{error:'Informe o nome do cliente.'});
       const result = db.prepare('INSERT INTO customers (name,document,address,address_number,address_complement,neighborhood,postal_code,city,state,email,phone,segment,notes,visit_interval_days,assigned_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(b.name.trim(),b.document||'',b.address||'',b.addressNumber||'',b.addressComplement||'',b.neighborhood||'',b.postalCode||'',b.city||'',b.state||'SP',b.email||'',b.phone||'',b.segment||'Varejo',b.notes||'',(await getProjectSettings()).operations.defaultVisitIntervalDays,user.role==='seller'?user.id:null);
+      if(user.role==='seller')db.prepare('INSERT OR IGNORE INTO customer_portfolio_assignments(customer_id,user_id) VALUES(?,?)').run(result.lastInsertRowid,user.id);
       const customer=db.prepare('SELECT * FROM customers WHERE id=?').get(result.lastInsertRowid);
       broadcast('data-changed',{resource:'customers',action:'created'});
       return send(res,201,customer);
@@ -580,7 +593,7 @@ const server = createServer(async (req,res) => {
       const prices=db.prepare('SELECT product_id,price_list_id,price FROM product_prices').all();
       return send(res,200,rows.map(product=>({...product,prices:prices.filter(row=>row.product_id===product.id)})));
     }
-    if (url.pathname === '/api/orders' && req.method === 'GET') return send(res,200,user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE c.assigned_user_id=? ORDER BY o.created_at DESC').all(user.id):db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all());
+    if (url.pathname === '/api/orders' && req.method === 'GET') return send(res,200,user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id AND a.user_id=?) ORDER BY o.created_at DESC').all(user.id):db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all());
     const erpPreviewMatch=url.pathname.match(/^\/api\/orders\/(\d+)\/erp-preview$/);
     if(erpPreviewMatch&&req.method==='GET'){
       const order=db.prepare('SELECT * FROM orders WHERE id=?').get(Number(erpPreviewMatch[1]));
@@ -600,7 +613,7 @@ const server = createServer(async (req,res) => {
       }
       const client = db.prepare('SELECT * FROM customers WHERE id=?').get(Number(b.customerId));
       if (!client) return send(res,400,{error:'Selecione um cliente válido.'});
-      if(user.role==='seller'&&client.assigned_user_id!==user.id)return send(res,403,{error:'Este cliente não pertence à sua carteira.'});
+      if(!canAccessCustomer(user,client.id))return send(res,403,{error:'Este cliente não pertence à sua carteira.'});
       if (!Array.isArray(b.items)||!b.items.length) return send(res,400,{error:'Adicione pelo menos um produto ao pedido.'});
       const priceMode='item';
       const headerListId=Number(b.priceListId||defaultPriceListId);

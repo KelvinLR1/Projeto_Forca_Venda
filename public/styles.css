@@ -311,8 +311,20 @@ body[data-theme="dark"] .order-product-subtab.active .order-product-subtab-count
 .portfolio-customer-cell strong{font-size:10px}
 .portfolio-customer-cell small{color:var(--muted);font-size:8px}
 .portfolio-table-wrap td:nth-child(2){color:var(--muted);font-size:9px}
-.portfolio-table-wrap td .custom-select{width:100%;min-width:210px;max-width:360px;margin:0}
-.portfolio-table-wrap .custom-select-trigger{min-height:36px;padding:8px 10px;font-size:10px}
+.portfolio-multiselect{position:relative;width:min(100%,360px);min-width:230px}
+.portfolio-multiselect>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px;padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);font-size:10px;cursor:pointer;list-style:none}
+.portfolio-multiselect>summary::-webkit-details-marker{display:none}
+.portfolio-multiselect>summary:hover,.portfolio-multiselect[open]>summary{border-color:#85b99a}
+.portfolio-assignment-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.portfolio-assignment-chevron{color:var(--muted);transition:transform .18s ease}
+.portfolio-multiselect[open] .portfolio-assignment-chevron{transform:rotate(180deg)}
+.portfolio-assignment-options{position:absolute;z-index:5;top:calc(100% + 5px);left:0;right:0;max-height:230px;overflow-y:auto;padding:5px;border:1px solid var(--line);border-radius:8px;background:var(--surface);box-shadow:0 12px 28px #10182722}
+.portfolio-assignment-option{display:flex;align-items:center;gap:9px;padding:8px;border-radius:5px;color:var(--ink);font-size:10px;cursor:pointer}
+.portfolio-assignment-option:hover{background:var(--canvas)}
+.portfolio-assignment-option input{width:15px;height:15px;margin:0;accent-color:var(--green,#21845e)}
+.portfolio-assignment-option input:disabled{cursor:not-allowed}
+.portfolio-assignment-option small{color:var(--muted)}
+body[data-theme="dark"] .portfolio-assignment-options{box-shadow:0 12px 28px #0006}
 .portfolio-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;color:var(--muted);font-size:9px}
 .portfolio-pagination>div{display:flex;gap:7px}
 .portfolio-pagination .btn{padding:8px 11px}
