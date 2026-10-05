@@ -291,3 +291,35 @@ body[data-theme="dark"] .order-product-subtab.active .order-product-subtab-count
 .order-product-subtab.active{transition:background-color .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease}
 .order-product-subtab:active,.btn:active:not(:disabled){transform:scale(.985)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Manager workspace for assigning customers to seller portfolios. */
+.portfolio-panel{padding:20px}
+.portfolio-tools{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.portfolio-search{flex:1 1 340px;max-width:640px;margin:0}
+.portfolio-seller-filters{display:flex;gap:7px;overflow-x:auto;padding:1px 1px 10px;margin-bottom:5px;scrollbar-width:thin}
+.portfolio-filter{display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;min-height:32px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--white);color:var(--muted);font:600 9px var(--font);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.portfolio-filter:hover{border-color:#a7ceb4;color:var(--ink)}
+.portfolio-filter.active{border-color:#b9ddc6;background:#edf7f0;color:#23764e}
+.portfolio-filter span{display:grid;place-items:center;min-width:19px;height:18px;padding:0 5px;border-radius:9px;background:var(--canvas);font-size:8px}
+.portfolio-draft-status{margin:0 0 10px;padding:9px 11px;border:1px solid #f0dfbd;border-radius:7px;background:#fff9ed;color:#8a6525;font-size:10px}
+.portfolio-table-wrap{max-height:min(65vh,680px);overflow:auto}
+.portfolio-table-wrap table{min-width:680px}
+.portfolio-table-wrap thead{position:sticky;top:0;z-index:2;background:var(--canvas)}
+.portfolio-customer-cell{display:flex;align-items:center;gap:10px;min-width:190px}
+.portfolio-customer-cell .client-initial{flex:0 0 34px;width:34px;height:34px}
+.portfolio-customer-cell>span:last-child{display:grid;gap:3px;min-width:0}
+.portfolio-customer-cell strong{font-size:10px}
+.portfolio-customer-cell small{color:var(--muted);font-size:8px}
+.portfolio-table-wrap td:nth-child(2){color:var(--muted);font-size:9px}
+.portfolio-table-wrap td .custom-select{width:100%;min-width:210px;max-width:360px;margin:0}
+.portfolio-table-wrap .custom-select-trigger{min-height:36px;padding:8px 10px;font-size:10px}
+.portfolio-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;color:var(--muted);font-size:9px}
+.portfolio-pagination>div{display:flex;gap:7px}
+.portfolio-pagination .btn{padding:8px 11px}
+.portfolio-pagination .btn:disabled{opacity:.45;cursor:not-allowed}
+body[data-theme="dark"] .portfolio-filter{border-color:#343e51;background:#1c2433;color:#aeb8c6}
+body[data-theme="dark"] .portfolio-filter:hover{border-color:#54836a;color:#eef1f6}
+body[data-theme="dark"] .portfolio-filter.active{border-color:#42694f;background:#203a2d;color:#84d0a1}
+body[data-theme="dark"] .portfolio-filter span{background:#202a39}
+body[data-theme="dark"] .portfolio-draft-status{border-color:#5d4b2d;background:#302a1e;color:#e2c47e}
+@media(max-width:680px){.portfolio-panel{padding:14px}.portfolio-tools{align-items:stretch;flex-direction:column;gap:8px}.portfolio-search{flex-basis:auto;max-width:none}.portfolio-table-wrap{max-height:60vh}.portfolio-pagination{align-items:flex-start;flex-direction:column}.portfolio-pagination>div{width:100%}.portfolio-pagination .btn{flex:1}}

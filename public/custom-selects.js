@@ -1,7 +1,7 @@
 // Keep the native select as the source of truth for forms and existing listeners.
+let nextSelectId = 0;
 export function enhanceSelects(root = document) {
   let openControl = null;
-  let nextId = 0;
 
   function close({ restoreFocus = false } = {}) {
     if (!openControl) return;
@@ -32,7 +32,7 @@ export function enhanceSelects(root = document) {
     trigger.setAttribute('aria-expanded', 'false');
     const menu = document.createElement('div');
     menu.className = 'custom-select-menu';
-    menu.id = `custom-select-menu-${++nextId}`;
+    menu.id = `custom-select-menu-${++nextSelectId}`;
     menu.setAttribute('role', 'listbox');
     menu.hidden = true;
     trigger.setAttribute('aria-controls', menu.id);

@@ -107,6 +107,8 @@ db.exec(`
 
 const customerColumns=db.prepare('PRAGMA table_info(customers)').all().map(column=>column.name);
 if(!customerColumns.includes('visit_interval_days')) db.exec('ALTER TABLE customers ADD COLUMN visit_interval_days INTEGER NOT NULL DEFAULT 30');
+if(!customerColumns.includes('assigned_user_id')) db.exec('ALTER TABLE customers ADD COLUMN assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+db.exec('CREATE INDEX IF NOT EXISTS customers_assigned_user_idx ON customers(assigned_user_id,name)');
 const productColumns=db.prepare('PRAGMA table_info(products)').all().map(column=>column.name);
 if(!productColumns.includes('image_url')) db.exec("ALTER TABLE products ADD COLUMN image_url TEXT DEFAULT ''");
 if(!productColumns.includes('cost_price')) db.exec('ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT NULL');
@@ -245,13 +247,17 @@ async function body(req) {
   for await (const part of req) raw += part;
   return raw ? JSON.parse(raw) : {};
 }
-function listCustomers(search='') {
-  return db.prepare(`SELECT c.*, COUNT(o.id) order_count, COALESCE(SUM(o.total),0) total_bought,
+function listCustomers(search='', assignedUserId=null) {
+  const assignmentClause=assignedUserId==null?'':' AND c.assigned_user_id=?';
+  const params=[`%${search}%`,`%${search}%`,`%${search}%`];
+  if(assignedUserId!=null)params.push(assignedUserId);
+  return db.prepare(`SELECT c.*,u.name assigned_seller_name,COUNT(o.id) order_count,COALESCE(SUM(o.total),0) total_bought,
       (SELECT MAX(v.visited_at) FROM customer_visits v WHERE v.customer_id=c.id) last_visit
-    FROM customers c LEFT JOIN orders o ON o.customer_id=c.id
-    WHERE c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?
-    GROUP BY c.id ORDER BY c.name`).all(`%${search}%`,`%${search}%`,`%${search}%`);
+    FROM customers c LEFT JOIN orders o ON o.customer_id=c.id LEFT JOIN users u ON u.id=c.assigned_user_id
+    WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${assignmentClause}
+    GROUP BY c.id ORDER BY c.name`).all(...params);
 }
+function canAccessCustomer(user,customerId){return user.role!=='seller'||Boolean(db.prepare('SELECT id FROM customers WHERE id=? AND assigned_user_id=?').get(Number(customerId),user.id))}
 function localDateKey(date=new Date()){const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,10)}
 function addDaysToKey(key,days){const date=new Date(`${key}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function materializeVisitRouteSeries(seriesId,through){
@@ -270,7 +276,7 @@ function materializeVisitRouteSeries(seriesId,through){
 const server = createServer(async (req,res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
-    if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin':'*', 'access-control-allow-methods':'GET,POST,PATCH,OPTIONS', 'access-control-allow-headers':'content-type' }); return res.end(); }
+    if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin':'*', 'access-control-allow-methods':'GET,POST,PUT,PATCH,OPTIONS', 'access-control-allow-headers':'content-type' }); return res.end(); }
     if (url.pathname === '/api/health') return send(res,200,{ok:true,erpConfigured:Boolean((await getProjectSettings()).erp.apiBaseUrl)});
     if (url.pathname === '/api/auth/status' && req.method === 'GET') return send(res,200,{setupRequired:db.prepare('SELECT COUNT(*) count FROM users').get().count===0});
     if (url.pathname === '/api/auth/setup' && req.method === 'POST') {
@@ -386,6 +392,7 @@ const server = createServer(async (req,res) => {
       if(frequency==='monthly'&&(!weeks.length||weeks.some(week=>!Number.isInteger(week)||week<1||week>5)||new Set(weeks).size!==weeks.length))return send(res,400,{error:'Selecione ao menos uma semana do mês para a recorrência mensal.'});
       if(notes.length>2000)return send(res,400,{error:'As observações podem ter até 2.000 caracteres.'});
       if(!customerIds.length||customerIds.length>100||customerIds.some(id=>!Number.isInteger(id)||id<1)||new Set(customerIds).size!==customerIds.length)return send(res,400,{error:'Selecione de 1 a 100 clientes diferentes para a rota.'});
+      if(user.role==='seller'){const owned=db.prepare(`SELECT COUNT(*) count FROM customers WHERE assigned_user_id=? AND id IN (${customerIds.map(()=>'?').join(',')})`).get(user.id,...customerIds).count;if(owned!==customerIds.length)return send(res,403,{error:'A rota só pode conter clientes da sua carteira.'})}
       const assignee=db.prepare('SELECT id FROM users WHERE id=? AND active=1').get(assignedUserId);
       if(!assignee)return send(res,400,{error:'O responsável selecionado não está ativo.'});
       if(user.role==='seller'&&assignedUserId!==user.id)return send(res,403,{error:'Vendedores só podem criar rotas para si mesmos.'});
@@ -467,10 +474,10 @@ const server = createServer(async (req,res) => {
       return;
     }
     if (url.pathname === '/api/dashboard') {
-      const totals = db.prepare(`SELECT COUNT(*) orders, COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at)=date('now','localtime')`).get();
-      const customers = db.prepare('SELECT COUNT(*) count FROM customers').get().count;
-      const pending = db.prepare("SELECT COUNT(*) count FROM orders WHERE status IN ('Rascunho','Em análise','Falha na integração')").get().count;
-      const recent = db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 6').all();
+      const totals=user.role==='seller'?db.prepare(`SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at)=date('now','localtime') AND customer_id IN (SELECT id FROM customers WHERE assigned_user_id=?)`).get(user.id):db.prepare(`SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at)=date('now','localtime')`).get();
+      const customers=user.role==='seller'?db.prepare('SELECT COUNT(*) count FROM customers WHERE assigned_user_id=?').get(user.id).count:db.prepare('SELECT COUNT(*) count FROM customers').get().count;
+      const pending=user.role==='seller'?db.prepare("SELECT COUNT(*) count FROM orders WHERE status IN ('Rascunho','Em análise','Falha na integração') AND customer_id IN (SELECT id FROM customers WHERE assigned_user_id=?)").get(user.id).count:db.prepare("SELECT COUNT(*) count FROM orders WHERE status IN ('Rascunho','Em análise','Falha na integração')").get().count;
+      const recent=user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE c.assigned_user_id=? ORDER BY o.created_at DESC LIMIT 6').all(user.id):db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 6').all();
       return send(res,200,{...totals,customers,pending,recent});
     }
     if(url.pathname==='/api/reports'&&req.method==='GET'){
@@ -480,8 +487,8 @@ const server = createServer(async (req,res) => {
       if(period==='ytd') start.setMonth(0,1); else start.setDate(start.getDate()-({ '7d':6,'30d':29,'90d':89 }[period]));
       const spanDays=Math.round((end-start)/86400000)+1,previousEnd=new Date(start);previousEnd.setDate(previousEnd.getDate()-1);const previousStart=new Date(previousEnd);previousStart.setDate(previousStart.getDate()-spanDays+1);
       const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      const currentRows=db.prepare('SELECT * FROM orders WHERE date(created_at) BETWEEN ? AND ? ORDER BY created_at DESC').all(iso(start),iso(end));
-      const previous=db.prepare('SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at) BETWEEN ? AND ?').get(iso(previousStart),iso(previousEnd));
+      const currentRows=user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE date(o.created_at) BETWEEN ? AND ? AND c.assigned_user_id=? ORDER BY o.created_at DESC').all(iso(start),iso(end),user.id):db.prepare('SELECT * FROM orders WHERE date(created_at) BETWEEN ? AND ? ORDER BY created_at DESC').all(iso(start),iso(end));
+      const previous=user.role==='seller'?db.prepare('SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at) BETWEEN ? AND ? AND customer_id IN (SELECT id FROM customers WHERE assigned_user_id=?)').get(iso(previousStart),iso(previousEnd),user.id):db.prepare('SELECT COUNT(*) orders,COALESCE(SUM(total),0) revenue FROM orders WHERE date(created_at) BETWEEN ? AND ?').get(iso(previousStart),iso(previousEnd));
       const revenue=currentRows.reduce((sum,o)=>sum+Number(o.total||0),0),ordersCount=currentRows.length;
       const customerSet=new Set(currentRows.map(o=>o.customer_id));
       const statuses=new Map(),clients=new Map(),productsMap=new Map(),salesMap=new Map();
@@ -500,11 +507,43 @@ const server = createServer(async (req,res) => {
       else{for(let day=new Date(start);day<=end;day.setDate(day.getDate()+1)){const key=iso(day);salesSeries.push({date:key,label:new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short'}).format(day).replace('.',''),revenue:salesMap.get(key)||0})}}
       return send(res,200,{period,startDate:iso(start),endDate:iso(end),summary:{orders:ordersCount,revenue,averageTicket:ordersCount?revenue/ordersCount:0,customers:customerSet.size,previousOrders:previous.orders,previousRevenue:previous.revenue,revenueChangePct:previous.revenue?(revenue-previous.revenue)/previous.revenue*100:null,ordersChangePct:previous.orders?(ordersCount-previous.orders)/previous.orders*100:null},orders:currentRows.map(({id,erp_id,customer_name,status,total,created_at})=>({id,erp_id,customer_name,status,total,created_at})),salesSeries,statuses:[...statuses.values()].sort((a,b)=>b.revenue-a.revenue),topCustomers:[...clients.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,10),topProducts:[...productsMap.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,10)});
     }
-    if (url.pathname === '/api/customers' && req.method === 'GET') return send(res,200,listCustomers(url.searchParams.get('search')||''));
+    if(url.pathname==='/api/customer-portfolio'&&(req.method==='GET'||req.method==='PUT')){
+      if(!['admin','manager'].includes(user.role))return send(res,403,{error:'Somente gestores e administradores podem gerenciar as carteiras.'});
+      if(req.method==='GET'){
+        const search=String(url.searchParams.get('search')||'').trim().slice(0,120),sellerFilter=String(url.searchParams.get('seller')||'all'),page=Math.min(1000000,Math.max(0,Number.parseInt(url.searchParams.get('page')||'0',10)||0)),pageSize=100,offset=page*pageSize;
+        let filterSql='';const filterParams=[];
+        if(sellerFilter==='unassigned')filterSql=' AND c.assigned_user_id IS NULL';
+        else if(sellerFilter!=='all'){
+          const sellerId=Number(sellerFilter);
+          if(!Number.isInteger(sellerId)||sellerId<1)return send(res,400,{error:'Selecione uma carteira válida.'});
+          filterSql=' AND c.assigned_user_id=?';filterParams.push(sellerId);
+        }
+        const pattern=`%${search}%`,total=Number(db.prepare(`SELECT COUNT(*) count FROM customers c WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${filterSql}`).get(pattern,pattern,pattern,...filterParams).count);
+        const customers=db.prepare(`SELECT c.id,c.name,c.document,c.city,c.state,c.assigned_user_id,u.name assigned_seller_name FROM customers c LEFT JOIN users u ON u.id=c.assigned_user_id WHERE (c.name LIKE ? OR c.city LIKE ? OR c.document LIKE ?)${filterSql} ORDER BY c.name LIMIT ? OFFSET ?`).all(pattern,pattern,pattern,...filterParams,pageSize,offset);
+        const sellers=db.prepare("SELECT u.id,u.name,u.active,(SELECT COUNT(*) FROM customers c WHERE c.assigned_user_id=u.id) customer_count FROM users u WHERE u.role='seller' ORDER BY u.active DESC,u.name").all().map(row=>({...row,active:Boolean(row.active)}));
+        const unassignedCount=Number(db.prepare('SELECT COUNT(*) count FROM customers WHERE assigned_user_id IS NULL').get().count);
+        return send(res,200,{customers,sellers,total,page,pageSize,unassignedCount});
+      }
+      const b=await body(req),assignments=Array.isArray(b.assignments)?b.assignments:[];
+      if(!assignments.length||assignments.length>5000)return send(res,400,{error:'Envie de 1 a 5.000 alterações de carteira por vez.'});
+      const seen=new Set();
+      for(const item of assignments){
+        const customerId=Number(item?.customerId),sellerId=item?.sellerId===null||item?.sellerId===''?null:Number(item?.sellerId);
+        if(!Number.isInteger(customerId)||customerId<1||seen.has(customerId)||sellerId!==null&&(!Number.isInteger(sellerId)||sellerId<1))return send(res,400,{error:'Há uma atribuição inválida ou duplicada.'});
+        if(!db.prepare('SELECT id FROM customers WHERE id=?').get(customerId))return send(res,404,{error:'Um dos clientes não foi encontrado.'});
+        if(sellerId!==null&&!db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND active=1").get(sellerId))return send(res,400,{error:'Cada cliente deve ser atribuído a um vendedor ativo.'});
+        seen.add(customerId);
+      }
+      const update=db.prepare('UPDATE customers SET assigned_user_id=? WHERE id=?');
+      db.exec('BEGIN IMMEDIATE');try{for(const item of assignments)update.run(item.sellerId===null||item.sellerId===''?null:Number(item.sellerId),Number(item.customerId));db.exec('COMMIT')}catch(error){db.exec('ROLLBACK');throw error}
+      broadcast('data-changed',{resource:'customer_portfolio',action:'updated',count:assignments.length});
+      return send(res,200,{updated:assignments.length});
+    }
+    if (url.pathname === '/api/customers' && req.method === 'GET') return send(res,200,listCustomers(url.searchParams.get('search')||'',user.role==='seller'?user.id:null));
     if (url.pathname === '/api/customers' && req.method === 'POST') {
       const b = await body(req);
       if (!b.name?.trim()) return send(res,400,{error:'Informe o nome do cliente.'});
-      const result = db.prepare('INSERT INTO customers (name,document,address,address_number,address_complement,neighborhood,postal_code,city,state,email,phone,segment,notes,visit_interval_days) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(b.name.trim(),b.document||'',b.address||'',b.addressNumber||'',b.addressComplement||'',b.neighborhood||'',b.postalCode||'',b.city||'',b.state||'SP',b.email||'',b.phone||'',b.segment||'Varejo',b.notes||'',getProjectSettings().operations.defaultVisitIntervalDays);
+      const result = db.prepare('INSERT INTO customers (name,document,address,address_number,address_complement,neighborhood,postal_code,city,state,email,phone,segment,notes,visit_interval_days,assigned_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(b.name.trim(),b.document||'',b.address||'',b.addressNumber||'',b.addressComplement||'',b.neighborhood||'',b.postalCode||'',b.city||'',b.state||'SP',b.email||'',b.phone||'',b.segment||'Varejo',b.notes||'',(await getProjectSettings()).operations.defaultVisitIntervalDays,user.role==='seller'?user.id:null);
       const customer=db.prepare('SELECT * FROM customers WHERE id=?').get(result.lastInsertRowid);
       broadcast('data-changed',{resource:'customers',action:'created'});
       return send(res,201,customer);
@@ -512,12 +551,12 @@ const server = createServer(async (req,res) => {
     const customerVisitMatch=url.pathname.match(/^\/api\/customers\/(\d+)\/visits$/);
     if(customerVisitMatch&&req.method==='GET'){
       const customerId=Number(customerVisitMatch[1]);
-      if(!db.prepare('SELECT id FROM customers WHERE id=?').get(customerId)) return send(res,404,{error:'Cliente não encontrado.'});
+      if(!canAccessCustomer(user,customerId)) return send(res,404,{error:'Cliente não encontrado.'});
       return send(res,200,db.prepare('SELECT * FROM customer_visits WHERE customer_id=? ORDER BY visited_at DESC,id DESC').all(customerId));
     }
     if(customerVisitMatch&&req.method==='POST'){
       const customerId=Number(customerVisitMatch[1]),client=db.prepare('SELECT id FROM customers WHERE id=?').get(customerId);
-      if(!client) return send(res,404,{error:'Cliente não encontrado.'});
+      if(!client||!canAccessCustomer(user,customerId)) return send(res,404,{error:'Cliente não encontrado.'});
       const b=await body(req),notes=String(b.notes||'').trim();
       if(notes.length>2000) return send(res,400,{error:'A observação deve ter até 2.000 caracteres.'});
       const result=db.prepare('INSERT INTO customer_visits (customer_id,seller,result,notes) VALUES (?,?,?,?)').run(customerId,user.name,String(b.result||'Sem venda').slice(0,40),notes);
@@ -528,6 +567,7 @@ const server = createServer(async (req,res) => {
     const customerVisitIntervalMatch=url.pathname.match(/^\/api\/customers\/(\d+)\/visit-interval$/);
     if(customerVisitIntervalMatch&&req.method==='PATCH'){
       const customerId=Number(customerVisitIntervalMatch[1]),b=await body(req),days=Number(b.days);
+      if(!canAccessCustomer(user,customerId))return send(res,404,{error:'Cliente não encontrado.'});
       if(!Number.isInteger(days)||days<1||days>365) return send(res,400,{error:'O prazo deve ser entre 1 e 365 dias.'});
       const result=db.prepare('UPDATE customers SET visit_interval_days=? WHERE id=?').run(days,customerId);
       if(!result.changes) return send(res,404,{error:'Cliente não encontrado.'});
@@ -540,11 +580,11 @@ const server = createServer(async (req,res) => {
       const prices=db.prepare('SELECT product_id,price_list_id,price FROM product_prices').all();
       return send(res,200,rows.map(product=>({...product,prices:prices.filter(row=>row.product_id===product.id)})));
     }
-    if (url.pathname === '/api/orders' && req.method === 'GET') return send(res,200,db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all());
+    if (url.pathname === '/api/orders' && req.method === 'GET') return send(res,200,user.role==='seller'?db.prepare('SELECT o.* FROM orders o JOIN customers c ON c.id=o.customer_id WHERE c.assigned_user_id=? ORDER BY o.created_at DESC').all(user.id):db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all());
     const erpPreviewMatch=url.pathname.match(/^\/api\/orders\/(\d+)\/erp-preview$/);
     if(erpPreviewMatch&&req.method==='GET'){
       const order=db.prepare('SELECT * FROM orders WHERE id=?').get(Number(erpPreviewMatch[1]));
-      if(!order) return send(res,404,{error:'Pedido não encontrado.'});
+      if(!order||!canAccessCustomer(user,order.customer_id)) return send(res,404,{error:'Pedido não encontrado.'});
       const customer=db.prepare('SELECT id,erp_id FROM customers WHERE id=?').get(order.customer_id);
       const lists=db.prepare('SELECT id,erp_id,name FROM price_lists').all();
       const items=JSON.parse(order.items_json||'[]');
@@ -560,6 +600,7 @@ const server = createServer(async (req,res) => {
       }
       const client = db.prepare('SELECT * FROM customers WHERE id=?').get(Number(b.customerId));
       if (!client) return send(res,400,{error:'Selecione um cliente válido.'});
+      if(user.role==='seller'&&client.assigned_user_id!==user.id)return send(res,403,{error:'Este cliente não pertence à sua carteira.'});
       if (!Array.isArray(b.items)||!b.items.length) return send(res,400,{error:'Adicione pelo menos um produto ao pedido.'});
       const priceMode='item';
       const headerListId=Number(b.priceListId||defaultPriceListId);
