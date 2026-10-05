@@ -108,6 +108,8 @@ db.exec(`
 const customerColumns=db.prepare('PRAGMA table_info(customers)').all().map(column=>column.name);
 if(!customerColumns.includes('visit_interval_days')) db.exec('ALTER TABLE customers ADD COLUMN visit_interval_days INTEGER NOT NULL DEFAULT 30');
 if(!customerColumns.includes('assigned_user_id')) db.exec('ALTER TABLE customers ADD COLUMN assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+if(!customerColumns.includes('sales_blocked')) db.exec('ALTER TABLE customers ADD COLUMN sales_blocked INTEGER NOT NULL DEFAULT 0');
+if(!customerColumns.includes('sales_block_reason')) db.exec("ALTER TABLE customers ADD COLUMN sales_block_reason TEXT NOT NULL DEFAULT ''");
 db.exec('CREATE INDEX IF NOT EXISTS customers_assigned_user_idx ON customers(assigned_user_id,name)');
 db.exec(`CREATE TABLE IF NOT EXISTS customer_portfolio_assignments (
   customer_id INTEGER NOT NULL,
@@ -281,6 +283,7 @@ function listCustomers(search='', assignedUserId=null) {
     GROUP BY c.id ORDER BY c.name`).all(...params);
 }
 function canAccessCustomer(user,customerId){return user.role!=='seller'||Boolean(db.prepare('SELECT 1 FROM customer_portfolio_assignments WHERE customer_id=? AND user_id=?').get(Number(customerId),user.id))}
+function canManageCustomerSales(user,customerId){if(user.role==='admin')return true;if(user.role!=='manager')return false;const team=db.prepare('SELECT id FROM sales_teams WHERE manager_user_id=?').get(user.id);if(!team)return false;return Boolean(db.prepare('SELECT 1 FROM customers c WHERE c.id=? AND (NOT EXISTS(SELECT 1 FROM customer_portfolio_assignments a WHERE a.customer_id=c.id) OR EXISTS(SELECT 1 FROM customer_portfolio_assignments a JOIN sales_team_members tm ON tm.user_id=a.user_id WHERE a.customer_id=c.id AND tm.team_id=?))').get(Number(customerId),team.id))}
 function localDateKey(date=new Date()){const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,10)}
 function addDaysToKey(key,days){const date=new Date(`${key}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function materializeVisitRouteSeries(seriesId,through){
@@ -614,6 +617,16 @@ const server = createServer(async (req,res) => {
       broadcast('data-changed',{resource:'customers',action:'created'});
       return send(res,201,customer);
     }
+    const salesBlockMatch=url.pathname.match(/^\/api\/customers\/(\d+)\/sales-block$/);
+    if(salesBlockMatch&&req.method==='PATCH'){
+      if(!['admin','manager'].includes(user.role))return send(res,403,{error:'Somente gestores e administradores podem controlar bloqueios de venda.'});
+      const customerId=Number(salesBlockMatch[1]),b=await body(req),blocked=b.blocked===true,reason=blocked?String(b.reason||'Bloqueado manualmente pela equipe.').trim().slice(0,500):'';
+      if(!canManageCustomerSales(user,customerId))return send(res,404,{error:'Cliente não encontrado na sua equipe.'});
+      const result=db.prepare('UPDATE customers SET sales_blocked=?,sales_block_reason=? WHERE id=?').run(blocked?1:0,reason,customerId);
+      if(!result.changes)return send(res,404,{error:'Cliente não encontrado.'});
+      broadcast('data-changed',{resource:'customers',customerId,action:blocked?'sales_blocked':'sales_unblocked'});
+      return send(res,200,db.prepare('SELECT id,sales_blocked,sales_block_reason FROM customers WHERE id=?').get(customerId));
+    }
     const customerVisitMatch=url.pathname.match(/^\/api\/customers\/(\d+)\/visits$/);
     if(customerVisitMatch&&req.method==='GET'){
       const customerId=Number(customerVisitMatch[1]);
@@ -667,6 +680,7 @@ const server = createServer(async (req,res) => {
       const client = db.prepare('SELECT * FROM customers WHERE id=?').get(Number(b.customerId));
       if (!client) return send(res,400,{error:'Selecione um cliente válido.'});
       if(!canAccessCustomer(user,client.id))return send(res,403,{error:'Este cliente não pertence à sua carteira.'});
+      if(client.sales_blocked)return send(res,403,{error:client.sales_block_reason||'Este cliente está bloqueado para novos pedidos.'});
       if (!Array.isArray(b.items)||!b.items.length) return send(res,400,{error:'Adicione pelo menos um produto ao pedido.'});
       const priceMode='item';
       const headerListId=Number(b.priceListId||defaultPriceListId);

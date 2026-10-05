@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#f6f7f5"><title>Vértice | Força de Vendas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=customer-portfolio-v4">
+  <link rel="stylesheet" href="/styles.css?v=customer-portfolio-v5">
 </head>
 <body>
   <div class="auth-screen" id="auth-screen">
@@ -202,7 +202,7 @@
   <dialog id="erp-preview-dialog" class="modal"><div class="erp-preview-content"><div class="modal-head"><div><div class="eyebrow">COMPATIBILIDADE COM ERP</div><h2>Plano de envio do pedido</h2></div><button class="close-btn" type="button" id="close-erp-preview" aria-label="Fechar">×</button></div><div id="erp-preview-body"></div><div class="modal-actions"><button class="btn btn-secondary" type="button" id="close-erp-preview-bottom">Fechar</button></div></div></dialog>
   <dialog id="visit-dialog" class="modal"><form method="dialog" id="visit-form"><div class="modal-head"><div><div class="eyebrow">REGISTRO DE ATENDIMENTO</div><h2>Registrar visita</h2><p class="muted" id="visit-customer-name"></p></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><div class="visit-no-sale-note">A visita será registrada mesmo sem pedido ou venda.</div><label>Resultado<select id="visit-result"><option>Sem venda</option><option>Oportunidade identificada</option><option>Retorno combinado</option></select></label><label>Observações da visita<textarea id="visit-notes" rows="4" maxlength="2000" placeholder="Resumo da conversa, interesses e próximos passos"></textarea></label><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-visit" value="default">Salvar visita</button></div></form></dialog>
   <dialog id="user-dialog" class="modal"><form method="dialog" id="user-form"><div class="modal-head"><div><div class="eyebrow">ADMINISTRAÇÃO</div><h2>Criar acesso</h2></div><button class="close-btn" value="cancel" aria-label="Fechar">×</button></div><label>Nome<input id="user-name" required minlength="2" autocomplete="off"></label><label>E-mail<input id="user-email" type="email" required autocomplete="off"></label><div class="form-row"><label>Perfil<select id="user-role"><option value="seller">Vendedor</option><option value="manager">Gestor</option><option value="admin">Administrador</option></select></label><label>Senha inicial<input id="user-password" type="password" minlength="10" required autocomplete="new-password"></label></div><div class="auth-foot">Use uma senha inicial segura com pelo menos 10 caracteres.</div><div class="modal-actions"><button class="btn btn-secondary" value="cancel">Cancelar</button><button class="btn btn-primary" id="save-user" value="default">Criar acesso</button></div></form></dialog>
-  <script src="/app.js?v=customer-portfolio-v4" type="module"></script>
+  <script src="/app.js?v=customer-portfolio-v5" type="module"></script>
 </body>
 </html>
 

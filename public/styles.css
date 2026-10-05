@@ -381,3 +381,20 @@ body[data-theme="dark"] .team-list-card,body[data-theme="dark"] .team-seller-opt
 body[data-theme="dark"] .team-list-card:hover,body[data-theme="dark"] .team-list-card.active{background:#202a39;border-color:#54836a}
 body[data-theme="dark"] .team-seller-option:has(input:checked){background:#203a2d;border-color:#42694f}
 @media(max-width:680px){.team-management-panel{padding:14px}.team-editor{padding:12px}.team-editor-heading{align-items:flex-start;flex-direction:column}.team-form-fields{grid-template-columns:1fr}.team-seller-options{grid-template-columns:1fr}}
+
+/* Customer sales block status and actions. */
+.customer-detail-heading{align-items:flex-start}
+.customer-detail-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.btn-danger-outline{border:1px solid #efc4c4;background:#fff7f6;color:#b52c30}
+.btn-danger-outline:hover{border-color:#df9898;background:#fff0ef}
+.btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.sales-block-banner{display:grid;gap:3px;max-width:540px;margin-top:10px;padding:9px 11px;border:1px solid #f0c7c4;border-radius:8px;background:#fff3f1;color:#aa3833;font-size:10px}
+.sales-block-banner span{color:#8c5e5a;font-size:9px;line-height:1.45}
+.sales-block-badge{width:max-content;max-width:100%;margin:0 0 10px;padding:5px 8px;overflow:hidden;border-radius:6px;background:#fff0ee;color:#a9433d;font-size:9px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.order-customer-option-blocked{cursor:not-allowed;opacity:.72;background:#fff8f7}
+.order-customer-option-blocked .order-customer-select-mark{color:#a9433d}
+body[data-theme="dark"] .btn-danger-outline{border-color:#694044;background:#302226;color:#ffaaa7}
+body[data-theme="dark"] .sales-block-banner,body[data-theme="dark"] .sales-block-badge{border-color:#694044;background:#302226;color:#ffaaa7}
+body[data-theme="dark"] .sales-block-banner span{color:#d6a3a1}
+body[data-theme="dark"] .order-customer-option-blocked{background:#302226}
+@media(max-width:680px){.customer-detail-heading{align-items:stretch;flex-direction:column}.customer-detail-actions{justify-content:flex-start}.customer-detail-actions .btn{flex:1 1 auto}}
